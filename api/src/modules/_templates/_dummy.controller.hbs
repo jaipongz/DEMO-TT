@@ -1,0 +1,89 @@
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common'
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { [[MODULE_CLASS_NAME]]Service } from './[[MODULE_NAME]].service'
+import { Create[[MODULE_CLASS_NAME]]Dto } from './dto/create-[[MODULE_NAME]].dto'
+import { Update[[MODULE_CLASS_NAME]]Dto } from './dto/update-[[MODULE_NAME]].dto'
+import { [[MODULE_CLASS_NAME]]Draft } from './[[MODULE_NAME]]-draft.entity'
+import { JwtAuthGuard } from '../wcm-auth/guards/jwt-auth.guard'
+
+@ApiTags('[[MODULE_NAME]]')
+@Controller('[[MODULE_NAME]]')
+export class [[MODULE_CLASS_NAME]]Controller {
+  constructor(private readonly _service: [[MODULE_CLASS_NAME]]Service) {}
+
+  private resolveActorId(request: any): number {
+    const raw = request?.user?.id
+    const parsed = Number(raw)
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : 0
+  }
+
+  @Post()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create [[MODULE_NAME]] record' })
+  @ApiResponse({ status: 201, description: 'Created successfully', type: [[MODULE_CLASS_NAME]]Draft })
+  async create(@Body() dto: Create[[MODULE_CLASS_NAME]]Dto, @Req() req: any): Promise<[[MODULE_CLASS_NAME]]Draft> {
+    const actorId = this.resolveActorId(req)
+    dto.obj_created_by = actorId
+    dto.obj_modified_by = actorId
+    if (dto.publish || String(dto.obj_state || '').toLowerCase() === 'published') {
+      dto.obj_published_by = actorId
+    }
+    return this._service.create(dto)
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'Get all [[MODULE_NAME]] records' })
+  @ApiResponse({ status: 200, description: 'List of records', type: [[MODULE_CLASS_NAME]]Draft })
+  async findAll(@Query() query: Record<string, string | string[] | undefined>): Promise<any> {
+    return this._service.findAll(query)
+  }
+
+  @Post('lookup')
+  @ApiOperation({ summary: 'Get lookup options by field' })
+  @ApiResponse({ status: 200, description: 'Lookup options' })
+  async lookup(@Body() body: { field?: string; lang?: string }) {
+    return this._service.getLookup(body?.field, body?.lang)
+  }
+
+  @Post('actions')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Run list action (setstatus/delete)' })
+  @ApiResponse({ status: 200, description: 'List action result' })
+  async runAction(@Body() body: { action?: string; ids?: Array<string | number>; state?: string }, @Req() req: any) {
+    const actorId = this.resolveActorId(req)
+    return this._service.runListAction(body, actorId)
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get [[MODULE_NAME]] by ID or content ID' })
+  @ApiResponse({ status: 200, description: 'Found record', type: [[MODULE_CLASS_NAME]]Draft })
+  async findOne(@Param('id') id: string): Promise<[[MODULE_CLASS_NAME]]Draft | null> {
+    return this._service.findOne(id)
+  }
+
+  @Put(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update [[MODULE_NAME]] record' })
+  @ApiResponse({ status: 200, description: 'Updated record', type: [[MODULE_CLASS_NAME]]Draft })
+  async update(@Param('id') id: string, @Body() dto: Update[[MODULE_CLASS_NAME]]Dto, @Req() req: any): Promise<[[MODULE_CLASS_NAME]]Draft | null> {
+    const actorId = this.resolveActorId(req)
+    dto.obj_modified_by = actorId
+    if (dto.publish || String(dto.obj_state || '').toLowerCase() === 'published') {
+      dto.obj_published_by = actorId
+    }
+    return this._service.update(id, dto)
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete [[MODULE_NAME]] record' })
+  @ApiResponse({ status: 200, description: 'Deleted successfully' })
+  async remove(@Param('id') id: string, @Req() req: any): Promise<void> {
+    const actorId = this.resolveActorId(req)
+    return this._service.remove(id, actorId)
+  }
+}

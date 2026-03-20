@@ -1,0 +1,37 @@
+import { useMemo } from 'react'
+import { useRouter } from 'next/router'
+import GenericDetailForm from '../../components/forms/GenericDetailForm'
+import { [[MODULE_FILE_NAME]]FormConfig } from '../../config/forms/[[MODULE_FILE_NAME]]FormConfig'
+import { [[MODULE_FILE_NAME]]CustomFormConfig } from '../../config/forms/custom/[[MODULE_FILE_NAME]]CustomFormConfig'
+import { resolveFormConfig } from '../../config/forms/resolveFormConfig'
+
+const module_name = '[[MODULE_NAME]]'
+
+export default function [[MODULE_FILE_NAME]]DetailPage() {
+  const router = useRouter()
+  const { id } = router.query
+  const isNew = id === 'new'
+  const modeParam = typeof router.query.mode === 'string' ? router.query.mode : undefined
+  const mode = isNew ? 'add' : modeParam === 'view' ? 'view' : 'edit'
+  const readOnly = mode === 'view'
+
+  const formConfig = useMemo(() => resolveFormConfig([[MODULE_FILE_NAME]]FormConfig, [[MODULE_FILE_NAME]]CustomFormConfig), [])
+
+  return (
+    <GenericDetailForm
+      id={id}
+      endpoint={`/${module_name}`}
+      isNew={isNew}
+      formConfig={formConfig}
+      initialData={{
+        [[DYNAMIC_INITIAL_DATA]]
+        obj_lang: '[[DEFAULT_LANGUAGE]]',
+        obj_state: 'draft',
+      }}
+      title={isNew ? 'Create [[MODULE_TITLE]]' : readOnly ? 'View [[MODULE_TITLE]]' : 'Edit [[MODULE_TITLE]]'}
+      subtitle={isNew ? 'Master template module using all dynamic field types' : undefined}
+      readOnly={readOnly}
+      showBottomSaveBar={false}
+    />
+  )
+}

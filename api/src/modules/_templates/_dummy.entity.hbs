@@ -1,0 +1,27 @@
+import { Column, CreateDateColumn, Entity, PrimaryColumn } from 'typeorm'
+
+@Entity('[[TABLE_NAME]]')
+export class [[MODULE_CLASS_NAME]] {
+  @PrimaryColumn({ type: 'bigint', name: '[[PRIMARY_ID_COLUMN]]' })
+  [[PRIMARY_ID_PROP]]: string
+
+[[ENTITY_COLUMNS]]
+
+  @Column('varchar', { name: 'obj_lang', length: 10 })
+  objLang: string
+
+  @Column('bigint', { name: 'obj_content_id' })
+  objContentId: string
+
+  @CreateDateColumn({ name: 'obj_created_date' })
+  objCreatedDate: Date
+
+  @Column('int', { name: 'obj_created_by' })
+  objCreatedBy: number
+
+  @Column('datetime', { name: 'obj_published_date', nullable: true, default: () => 'NULL' })
+  objPublishedDate: Date | null
+
+  @Column('int', { name: 'obj_published_by', nullable: true })
+  objPublishedBy: number | null
+}

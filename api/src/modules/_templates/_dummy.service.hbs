@@ -1,0 +1,488 @@
+import { Injectable, Logger } from '@nestjs/common'
+import { InjectRepository } from '@nestjs/typeorm'
+import { Brackets, Repository, SelectQueryBuilder } from 'typeorm'
+import { [[MODULE_CLASS_NAME]] } from './[[MODULE_NAME]].entity'
+import { [[MODULE_CLASS_NAME]]Draft } from './[[MODULE_NAME]]-draft.entity'
+import { Create[[MODULE_CLASS_NAME]]Dto } from './dto/create-[[MODULE_NAME]].dto'
+import { Update[[MODULE_CLASS_NAME]]Dto } from './dto/update-[[MODULE_NAME]].dto'
+import { OMDatetime } from '../../common/utils/OMDatetime.util'
+import { OMUtilts } from '../../common/utils/OMUtilts.util'
+
+const CHILD_COLLECTION_KEYS = [
+[[CHILD_COLLECTION_KEYS]]
+]
+
+type ChildCollectionRows = Record<string, Array<Record<string, any>>>
+
+type LookupOption = {
+  value: string
+  label: string
+}
+
+type LookupResponse = {
+  field: string
+  lang: string
+  options: LookupOption[]
+}
+
+type ListQueryInput = {
+  page?: string | number
+  pageSize?: string | number
+  search?: string
+  searchFields?: string | string[]
+  sortField?: string
+  sortDirection?: string
+  filters?: Record<string, unknown>
+  [key: string]: unknown
+}
+
+type NormalizedListQuery = {
+  page: number
+  pageSize: number
+  search: string
+  searchFields: string[]
+  sortField: string
+  sortDirection: 'ASC' | 'DESC'
+  filters: Record<string, string[]>
+}
+
+type ListActionInput = {
+  action?: string
+  ids?: Array<string | number>
+  state?: string
+}
+
+@Injectable()
+export class [[MODULE_CLASS_NAME]]Service {
+  private readonly logger = new Logger([[MODULE_CLASS_NAME]]Service.name)
+  private readonly listFieldMap: Record<string, keyof [[MODULE_CLASS_NAME]]Draft> = {
+[[LIST_FIELD_MAP]]
+  }
+
+  constructor(
+    @InjectRepository([[MODULE_CLASS_NAME]])
+    private mainRepository: Repository<[[MODULE_CLASS_NAME]]>,
+    @InjectRepository([[MODULE_CLASS_NAME]]Draft)
+    private draftRepository: Repository<[[MODULE_CLASS_NAME]]Draft>,
+  ) {}
+
+  private parseArrayValue(value: unknown): any[] | undefined {
+    if (Array.isArray(value)) return value
+    if (typeof value !== 'string') return undefined
+
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed) ? parsed : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  private extractChildCollections(payload: Record<string, any>): {
+    sanitizedRest: Record<string, any>
+    childCollectionRows: ChildCollectionRows
+  } {
+    const childCollectionRows: ChildCollectionRows = {}
+    const sanitizedRest = { ...payload }
+
+    for (const key of CHILD_COLLECTION_KEYS) {
+      if (!key) continue
+      if (!Object.prototype.hasOwnProperty.call(sanitizedRest, key)) continue
+      const parsed = this.parseArrayValue(sanitizedRest[key])
+      if (parsed) {
+        childCollectionRows[key] = parsed
+      }
+      delete sanitizedRest[key]
+    }
+
+    for (const [key, rawValue] of Object.entries(payload)) {
+      if (!key.startsWith('__child_')) continue
+      const parsed = this.parseArrayValue(rawValue)
+      if (!parsed) {
+        delete sanitizedRest[key]
+        continue
+      }
+
+      childCollectionRows[key] = parsed
+      delete sanitizedRest[key]
+    }
+
+    return {
+      sanitizedRest,
+      childCollectionRows,
+    }
+  }
+
+  private async replaceDraftChildren(parentId: string, objRev: number, childCollectionRows: ChildCollectionRows, draft: [[MODULE_CLASS_NAME]]Draft): Promise<void> {
+[[HANDLE_DRAFT_CHILDREN]]
+  }
+
+  private async replacePublishedChildren(parentId: string, childCollectionRows: ChildCollectionRows, draft: [[MODULE_CLASS_NAME]]Draft): Promise<void> {
+[[HANDLE_PUBLISHED_CHILDREN]]
+  }
+
+  private async removePublishedChildren(parentId: string): Promise<void> {
+[[HANDLE_REMOVE_PUBLISHED_CHILDREN]]
+  }
+
+  private async getDraftChildCollections(parentId: string, objRev: number): Promise<ChildCollectionRows> {
+[[HANDLE_GET_DRAFT_CHILDREN]]
+    return {}
+  }
+
+  private async hydrateChildren(parentId: string, objRev: number, row: Record<string, any>): Promise<Record<string, any>> {
+[[HANDLE_HYDRATE_CHILDREN]]
+    return row
+  }
+
+  private toPositiveInt(value: unknown, fallback: number): number {
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed)) return fallback
+    const normalized = Math.floor(parsed)
+    return normalized > 0 ? normalized : fallback
+  }
+
+  private parseSearchFields(input: unknown): string[] {
+    if (Array.isArray(input)) {
+      return input.map((item) => String(item).trim()).filter(Boolean)
+    }
+
+    const raw = String(input ?? '').trim()
+    if (!raw) return []
+    return raw.split(',').map((item) => item.trim()).filter(Boolean)
+  }
+
+  private toStringArray(value: unknown): string[] {
+    if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean)
+    const raw = String(value ?? '').trim()
+    if (!raw) return []
+
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed.map((item) => String(item).trim()).filter(Boolean)
+    } catch {
+      // ignore JSON parse errors and fallback to comma-split
+    }
+
+    return raw.split(',').map((item) => item.trim()).filter(Boolean)
+  }
+
+  private parseFilters(query: ListQueryInput): Record<string, string[]> {
+    const result: Record<string, string[]> = {}
+
+    const incomingFilters = query.filters
+    if (incomingFilters && typeof incomingFilters === 'object' && !Array.isArray(incomingFilters)) {
+      Object.entries(incomingFilters).forEach(([key, raw]) => {
+        const values = this.toStringArray(raw)
+        if (values.length > 0) result[key] = values
+      })
+    }
+
+    Object.entries(query).forEach(([key, rawValue]) => {
+      if (!key.startsWith('filter_')) return
+      const field = key.replace(/^filter_/, '').trim()
+      if (!field) return
+      const values = this.toStringArray(rawValue)
+      if (values.length > 0) result[field] = values
+    })
+
+    return result
+  }
+
+  private normalizeQuery(query?: ListQueryInput): NormalizedListQuery {
+    const page = this.toPositiveInt(query?.page, 1)
+    const pageSize = Math.min(200, this.toPositiveInt(query?.pageSize, 15))
+    const search = String(query?.search ?? '').trim()
+    const searchFields = this.parseSearchFields(query?.searchFields)
+    const sortField = String(query?.sortField || 'obj_modified_date').trim()
+    const sortDirection = String(query?.sortDirection || 'desc').toUpperCase() === 'ASC' ? 'ASC' : 'DESC'
+    const filters = this.parseFilters(query || {})
+
+    return { page, pageSize, search, searchFields, sortField, sortDirection, filters }
+  }
+
+  private resolveColumn(field: string): keyof [[MODULE_CLASS_NAME]]Draft | undefined {
+    const raw = String(field || '').trim()
+    if (!raw) return undefined
+    return this.listFieldMap[raw]
+  }
+
+  private applySearch(qb: SelectQueryBuilder<[[MODULE_CLASS_NAME]]Draft>, term: string, fields: string[]): void {
+    if (!term) return
+
+    const resolvedColumns = fields
+      .map((field) => this.resolveColumn(field))
+      .filter((field): field is keyof [[MODULE_CLASS_NAME]]Draft => Boolean(field))
+
+    const fallback = ['obj_state']
+      .map((field) => this.resolveColumn(field))
+      .filter((field): field is keyof [[MODULE_CLASS_NAME]]Draft => Boolean(field))
+
+    const targets = resolvedColumns.length > 0 ? resolvedColumns : fallback
+    if (!targets.length) return
+
+    qb.andWhere(
+      new Brackets((where) => {
+        targets.forEach((column, index) => {
+          const clause = `LOWER(COALESCE(CAST(d.${String(column)} AS CHAR), '')) LIKE :searchTerm`
+          if (index === 0) {
+            where.where(clause, { searchTerm: `%${term.toLowerCase()}%` })
+          } else {
+            where.orWhere(clause, { searchTerm: `%${term.toLowerCase()}%` })
+          }
+        })
+      }),
+    )
+  }
+
+  private applyFilters(qb: SelectQueryBuilder<[[MODULE_CLASS_NAME]]Draft>, filters: Record<string, string[]>): void {
+    Object.entries(filters).forEach(([field, values]) => {
+      if (!values.length) return
+      const column = this.resolveColumn(field)
+      if (!column) return
+
+      const paramName = `filter_${String(column)}`
+      if (values.length === 1) {
+        qb.andWhere(`d.${String(column)} = :${paramName}`, { [paramName]: values[0] })
+      } else {
+        qb.andWhere(`d.${String(column)} IN (:...${paramName})`, { [paramName]: values })
+      }
+    })
+  }
+
+  private applySort(qb: SelectQueryBuilder<[[MODULE_CLASS_NAME]]Draft>, sortField: string, sortDirection: 'ASC' | 'DESC'): void {
+    const column = this.resolveColumn(sortField) || this.resolveColumn('obj_modified_date') || 'objModifiedDate'
+    qb.orderBy(`d.${String(column)}`, sortDirection)
+  }
+
+  private buildListQuery(query?: ListQueryInput): { qb: SelectQueryBuilder<[[MODULE_CLASS_NAME]]Draft>; normalized: NormalizedListQuery } {
+    const normalized = this.normalizeQuery(query)
+    const qb = this.draftRepository.createQueryBuilder('d')
+
+    qb.andWhere('d.objStatus = :activeStatus', { activeStatus: 'active' })
+    this.applySearch(qb, normalized.search, normalized.searchFields)
+    this.applyFilters(qb, normalized.filters)
+    this.applySort(qb, normalized.sortField, normalized.sortDirection)
+
+    return { qb, normalized }
+  }
+
+  private async nextId(): Promise<string> {
+    return OMUtilts.generateTimestampId()
+  }
+
+  private async nextRevision(contentId: string): Promise<number> {
+    const result = await this.draftRepository
+      .createQueryBuilder('d')
+      .select('MAX(d.objRev)', 'max')
+      .where('d.objContentId = :contentId', { contentId })
+      .getRawOne<{ max: string }>()
+    return (Number(result?.max) || 0) + 1
+  }
+
+  private shouldPublish(publishFlag: unknown, objState?: string): boolean {
+    if (typeof publishFlag === 'boolean') return publishFlag
+    const normalized = String(objState || '').trim().toLowerCase()
+    return normalized === 'publish' || normalized === 'published'
+  }
+
+  async create(createDto: Create[[MODULE_CLASS_NAME]]Dto): Promise<[[MODULE_CLASS_NAME]]Draft> {
+    const { publish, obj_state, obj_status, obj_lang, obj_rev, obj_created_by, obj_modified_by, obj_published_by, ...rest } = createDto
+    const { sanitizedRest, childCollectionRows } = this.extractChildCollections(rest as Record<string, any>)
+
+    const newId = await this.nextId()
+    const contentId = newId
+    const nextRev = obj_rev ?? (await this.nextRevision(contentId))
+    const publishFlag = this.shouldPublish(publish, obj_state)
+    const nowUtc = OMDatetime.getUtcNow()
+
+    const draft = this.draftRepository.create({
+      ...sanitizedRest,
+      [[PRIMARY_ID_PROP]]: newId,
+      objStatus: obj_status || 'active',
+      objState: publishFlag ? 'published' : obj_state || 'draft',
+      objLang: obj_lang || 'en',
+      objRev: nextRev,
+      objContentId: contentId,
+      objCreatedDate: nowUtc,
+      objCreatedBy: obj_created_by,
+      objModifiedDate: nowUtc,
+      objModifiedBy: obj_modified_by ?? obj_created_by,
+      objPublishedDate: publishFlag ? nowUtc : null,
+      objPublishedBy: publishFlag ? obj_published_by ?? obj_created_by ?? null : null,
+    })
+
+    const savedDraft = await this.draftRepository.save(draft)
+    await this.replaceDraftChildren(savedDraft.[[PRIMARY_ID_PROP]], savedDraft.objRev, childCollectionRows, savedDraft)
+
+    if (publishFlag) {
+      const published = this.mainRepository.create(savedDraft as unknown as [[MODULE_CLASS_NAME]])
+      await this.mainRepository.save(published)
+      await this.replacePublishedChildren(savedDraft.[[PRIMARY_ID_PROP]], childCollectionRows, savedDraft)
+    }
+
+    return savedDraft
+  }
+
+  async findAll(query?: ListQueryInput): Promise<[[MODULE_CLASS_NAME]]Draft[] | { items: [[MODULE_CLASS_NAME]]Draft[]; total: number; page: number; pageSize: number }> {
+    if (!query || Object.keys(query).length === 0) {
+      return this.draftRepository.find({ where: { objStatus: 'active' }, order: { objModifiedDate: 'DESC' } })
+    }
+
+    const { qb, normalized } = this.buildListQuery(query)
+    qb.skip((normalized.page - 1) * normalized.pageSize)
+    qb.take(normalized.pageSize)
+
+    const [items, total] = await qb.getManyAndCount()
+    return { items, total, page: normalized.page, pageSize: normalized.pageSize }
+  }
+
+  async findOne(id: string): Promise<[[MODULE_CLASS_NAME]]Draft | null> {
+    const row = await this.draftRepository
+      .createQueryBuilder('d')
+      .where('d.objStatus = :status', { status: 'active' })
+      .andWhere('(d.[[PRIMARY_ID_PROP]] = :id OR d.objContentId = :id)', { id })
+      .orderBy('d.objRev', 'DESC')
+      .getOne()
+
+    if (!row) return null
+    const hydrated = await this.hydrateChildren(row.[[PRIMARY_ID_PROP]], row.objRev, row as unknown as Record<string, any>)
+    return hydrated as [[MODULE_CLASS_NAME]]Draft
+  }
+
+  async update(id: string, updateDto: Update[[MODULE_CLASS_NAME]]Dto): Promise<[[MODULE_CLASS_NAME]]Draft | null> {
+    const existing = await this.findOne(id)
+    if (!existing) return null
+
+    const { publish, obj_state, obj_lang, obj_modified_by, obj_published_by, ...rest } = updateDto
+    const { sanitizedRest, childCollectionRows } = this.extractChildCollections(rest as Record<string, any>)
+    const currentPrimaryId = existing.[[PRIMARY_ID_PROP]] as any
+
+    await this.draftRepository.update(
+      { [[PRIMARY_ID_PROP]]: currentPrimaryId, objLang: existing.objLang, objRev: existing.objRev },
+      { objStatus: 'archive', objModifiedBy: obj_modified_by ?? existing.objModifiedBy, objModifiedDate: OMDatetime.getUtcNow() },
+    )
+
+    const contentId = String(existing.objContentId)
+    const nextRev = await this.nextRevision(contentId)
+    const publishFlag = this.shouldPublish(publish, obj_state)
+    const nowUtc = OMDatetime.getUtcNow()
+
+    const merged = this.draftRepository.create({
+      ...existing,
+      ...sanitizedRest,
+      objState: publishFlag ? 'published' : obj_state || existing.objState || 'draft',
+      objLang: obj_lang || existing.objLang || 'en',
+      objRev: nextRev,
+      objModifiedDate: nowUtc,
+      objModifiedBy: obj_modified_by ?? existing.objModifiedBy,
+      objPublishedDate: publishFlag ? nowUtc : null,
+      objPublishedBy: publishFlag ? obj_published_by ?? existing.objCreatedBy : null,
+    })
+
+    const savedDraft = await this.draftRepository.save(merged)
+    const effectiveChildCollectionRows =
+      Object.keys(childCollectionRows).length > 0
+        ? childCollectionRows
+        : await this.getDraftChildCollections(existing.[[PRIMARY_ID_PROP]], existing.objRev)
+
+    await this.replaceDraftChildren(savedDraft.[[PRIMARY_ID_PROP]], savedDraft.objRev, effectiveChildCollectionRows, savedDraft)
+
+    if (publishFlag) {
+      await this.mainRepository.save(this.mainRepository.create(savedDraft as unknown as [[MODULE_CLASS_NAME]]))
+      await this.replacePublishedChildren(savedDraft.[[PRIMARY_ID_PROP]], effectiveChildCollectionRows, savedDraft)
+    } else {
+      await this.mainRepository.delete({ [[PRIMARY_ID_PROP]]: savedDraft.[[PRIMARY_ID_PROP]] as any } as any)
+      await this.removePublishedChildren(savedDraft.[[PRIMARY_ID_PROP]])
+    }
+
+    return savedDraft
+  }
+
+  async remove(id: string, actorId?: number): Promise<void> {
+    const existing = await this.findOne(id)
+    if (!existing) return
+
+    const nextRev = await this.nextRevision(String(existing.objContentId))
+
+    await this.draftRepository.save(
+      this.draftRepository.create({
+        ...existing,
+        objStatus: 'delete',
+        objState: 'draft',
+        objRev: nextRev,
+        objModifiedDate: OMDatetime.getUtcNow(),
+        objModifiedBy: actorId ?? existing.objModifiedBy ?? existing.objCreatedBy,
+        objPublishedDate: null,
+        objPublishedBy: null,
+      }),
+    )
+
+    await this.mainRepository.delete({ [[PRIMARY_ID_PROP]]: existing.[[PRIMARY_ID_PROP]] as any } as any)
+    await this.removePublishedChildren(existing.[[PRIMARY_ID_PROP]])
+  }
+
+  async runListAction(payload?: ListActionInput, actorId?: number): Promise<{ action: string; requested: number; success: number; failed: number; failedIds: string[] }> {
+    const action = String(payload?.action || '').trim().toLowerCase()
+    const ids = Array.isArray(payload?.ids) ? payload.ids.map((id) => String(id ?? '').trim()).filter(Boolean) : []
+
+    if (!action || ids.length === 0) {
+      return { action, requested: ids.length, success: 0, failed: ids.length, failedIds: ids }
+    }
+
+    let success = 0
+    const failedIds: string[] = []
+
+    if (action === 'setstatus') {
+      const nextState = String(payload?.state || '').trim().toLowerCase()
+      for (const id of ids) {
+        try {
+          const publish = nextState === 'published'
+          const result = await this.update(id, {
+            obj_state: nextState,
+            publish,
+            obj_modified_by: actorId,
+            obj_published_by: publish ? actorId : undefined,
+          } as Update[[MODULE_CLASS_NAME]]Dto)
+          if (!result) {
+            failedIds.push(id)
+            continue
+          }
+          success += 1
+        } catch {
+          failedIds.push(id)
+        }
+      }
+      return { action, requested: ids.length, success, failed: failedIds.length, failedIds }
+    }
+
+    if (action === 'delete') {
+      for (const id of ids) {
+        try {
+          await this.remove(id, actorId)
+          success += 1
+        } catch {
+          failedIds.push(id)
+        }
+      }
+      return { action, requested: ids.length, success, failed: failedIds.length, failedIds }
+    }
+
+    return { action, requested: ids.length, success: 0, failed: ids.length, failedIds: ids }
+  }
+
+  async getLookup(field?: string, lang?: string): Promise<LookupResponse> {
+    const normalizedField = String(field || '')
+    const normalizedLang = String(lang || '')
+
+    const map: Record<string, Array<{ value: string; label: string }>> = {
+[[LOOKUP_STATIC_OPTIONS]]
+    }
+
+    return {
+      field: normalizedField,
+      lang: normalizedLang,
+      options: map[normalizedField] || [],
+    }
+  }
+}

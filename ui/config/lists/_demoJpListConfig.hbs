@@ -1,0 +1,43 @@
+import { ListConfig } from '../../types/listConfig'
+
+const module_name = '[[MODULE_NAME]]'
+
+export const [[MODULE_FILE_NAME]]ListConfig: ListConfig = {
+  title: '[[MODULE_TITLE]]',
+  endpoint: `/${module_name}`,
+  serverSide: true,
+  keywords: 'title,email,category,status',
+  filters: [
+    {
+      key: 'category',
+      label: 'Category',
+      lookup: {
+        endpoint: `/${module_name}/lookup`,
+        field: 'category',
+      },
+    },
+    {
+      key: 'obj_state',
+      label: 'State',
+      options: [
+        { label: 'Draft', value: 'draft' },
+        { label: 'Published', value: 'published' },
+        { label: 'Unpublish', value: 'unpublish' },
+      ],
+    },
+  ],
+  export: true,
+  select: true,
+  scroll: true,
+  limit: 15,
+  createHref: `/${module_name}/new?mode=add`,
+  rowKey: '[[ROW_KEY]]',
+  columns: [
+    { field: 'thumbnail', name: 'Thumbnail', type: 'image', width: 120, sort: false },
+    { field: 'title', name: 'Title', type: 'text', width: 220, sort: true },
+    { field: 'category', name: 'Category', type: 'text', width: 140, sort: true },
+    { field: 'obj_state', name: 'State', type: 'text', width: 110, sort: true },
+    { field: 'obj_lang', name: 'Language', type: 'text', width: 110, sort: true },
+    { field: 'obj_modified_date', name: 'Updated', type: 'datetime', width: 180, sort: true },
+  ],
+}

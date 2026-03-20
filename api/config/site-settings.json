@@ -1,0 +1,30 @@
+{
+  "siteName": "JaipongZ Industries",
+  "faviconUrl": "http://localhost:3000/stock/site-setting/5cK9qiKxNd/ChatGPT_Image_14_._._2569_20_04_17.png",
+  "googleApiKey": "",
+  "googleOAuthClientId": "admin@example.com\t",
+  "googleOAuthClientSecret": "admin123",
+  "passwordLifetimeDays": 90,
+  "sessionTimeoutMinutes": 60,
+  "maxLoginAttempts": 5,
+  "locale": "en",
+  "timezone": "Asia/Bangkok",
+  "maintenanceMode": "off",
+  "dynamicConfigs": [
+    {
+      "key": "STABLE_API_KEY",
+      "value": "xxxxxx"
+    },
+    {
+      "key": "TES",
+      "value": "sdasasdassad"
+    },
+    {
+      "key": "ASDF",
+      "value": "sssssss"
+    }
+  ],
+  "maxRevision": 10,
+  "actionLogsRetention": "6_month",
+  "updatedAt": "2026-03-16T10:24:58.947Z"
+}

@@ -1,0 +1,22 @@
+import { ListConfig } from '../../types/listConfig'
+
+const module_name = '[[MODULE_NAME]]'
+
+export const [[MODULE_FILE_NAME]]ListConfig: ListConfig = {
+  title: '[[MODULE_TITLE]]',
+  endpoint: `/${module_name}`,
+  serverSide: true,
+  keywords: '[[SEARCHABLE_FIELDS]]',
+  filters: [
+    [[FILTERS_CONFIG]]
+  ],
+  export: [[EXPORT_ENABLED]],
+  select: true,
+  scroll: false,
+  limit: [[ROW_LIMIT]],
+  createHref: `/${module_name}/new?mode=add`,
+  rowKey: '[[ROW_KEY]]',
+  columns: [
+    [[COLUMN_CONFIG]]
+  ],
+}
