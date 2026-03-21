@@ -249,6 +249,7 @@ export class DemoJpTestService {
         galleryCollectionProvided: Record<string, boolean>
     } {
         const sanitizedRest = { ...payload }
+        const consumedKeys = new Set<string>()
         const childCollectionRows: Record<string, Array<Record<string, any>>> = {
             'demo_jp_child': [],
         }
@@ -268,11 +269,22 @@ export class DemoJpTestService {
             const normalizedRawKey = this.normalizeKey(rawKey)
 
             if (normalizedRawKey.startsWith('__child_')) {
-            const suffix = this.normalizeKey(rawKey.replace(/^__child_/i, ''))
+                const suffix = this.normalizeKey(rawKey.replace(/^__child_/i, ''))
             if (suffix === this.normalizeKey('demo_jp_child') || suffix.startsWith(`${this.normalizeKey('demo_jp_child')}_list`)) {
                 childCollectionRows['demo_jp_child'] = this.toObjectArray(rawValue)
                 childCollectionProvided['demo_jp_child'] = true
+                    consumedKeys.add(rawKey)
             }
+            }
+
+            if (
+                normalizedRawKey === this.normalizeKey('demo_jp_child') ||
+                normalizedRawKey === this.normalizeKey('demo_jp_child_list') ||
+                normalizedRawKey === this.normalizeKey('child_list')
+            ) {
+                childCollectionRows['demo_jp_child'] = this.toObjectArray(rawValue)
+                childCollectionProvided['demo_jp_child'] = true
+                consumedKeys.add(rawKey)
             }
 
             if (normalizedRawKey.startsWith('__gallery_')) {
@@ -280,16 +292,29 @@ export class DemoJpTestService {
             if (suffix === this.normalizeKey('demo_jp_gallery')) {
                 galleryCollectionRows['demo_jp_gallery'] = this.toObjectArray(rawValue)
                 galleryCollectionProvided['demo_jp_gallery'] = true
+                    consumedKeys.add(rawKey)
             }
             if (suffix === this.normalizeKey('korea_gallery')) {
                 galleryCollectionRows['korea_gallery'] = this.toObjectArray(rawValue)
                 galleryCollectionProvided['korea_gallery'] = true
+                    consumedKeys.add(rawKey)
             }
+            }
+
+            if (normalizedRawKey === this.normalizeKey('demo_jp_gallery') || normalizedRawKey === this.normalizeKey('gallery')) {
+                galleryCollectionRows['demo_jp_gallery'] = this.toObjectArray(rawValue)
+                galleryCollectionProvided['demo_jp_gallery'] = true
+                consumedKeys.add(rawKey)
+            }
+            if (normalizedRawKey === this.normalizeKey('korea_gallery')) {
+                galleryCollectionRows['korea_gallery'] = this.toObjectArray(rawValue)
+                galleryCollectionProvided['korea_gallery'] = true
+                consumedKeys.add(rawKey)
             }
         })
 
         Object.keys(sanitizedRest).forEach((key) => {
-            if (key.startsWith('__child_') || key.startsWith('__gallery_')) {
+            if (key.startsWith('__child_') || key.startsWith('__gallery_') || consumedKeys.has(key)) {
                 delete sanitizedRest[key]
             }
         })
