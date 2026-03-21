@@ -1,599 +1,732 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { Repository } from 'typeorm'
+import { Brackets, Repository, SelectQueryBuilder } from 'typeorm'
 import { promises as fs } from 'fs'
 import * as path from 'path'
 import { Article } from './article.entity'
 import { ArticleDraft } from './article-draft.entity'
 import { CreateArticleDto } from './dto/create-article.dto'
 import { UpdateArticleDto } from './dto/update-article.dto'
+import { OMDatetime } from '../../common/utils/OMDatetime.util'
 import { OMUtilts } from '../../common/utils/OMUtilts.util'
 
-type LookupOption = { value: string; label: string }
+type LookupOption = {
+    value: string
+    label: string
+}
+
+type LookupResponse = {
+    field: string
+    lang: string
+    options: LookupOption[]
+}
+
+type ListQueryInput = {
+    page?: string | number
+    pageSize?: string | number
+    search?: string
+    searchFields?: string | string[]
+    sortField?: string
+    sortDirection?: string
+    filters?: Record<string, unknown>
+    [key: string]: unknown
+}
+
+type NormalizedListQuery = {
+    page: number
+    pageSize: number
+    search: string
+    searchFields: string[]
+    sortField: string
+    sortDirection: 'ASC' | 'DESC'
+    filters: Record<string, string[]>
+}
+
+type ListActionInput = {
+    action?: string
+    ids?: Array<string | number>
+    state?: string
+}
+
+type TableLookupConfig = {
+    tableName: string
+    valueColumn: string
+    labelColumn: string
+    labelColumnByLang?: {
+        th?: string
+        en?: string
+    }
+    whereSql?: string
+    langColumn?: string
+    orderBy?: {
+        column: string
+        direction?: 'ASC' | 'DESC'
+    }
+}
 
 @Injectable()
 export class ArticleService {
-  private readonly logger = new Logger(ArticleService.name)
-  private readonly siteSettingsPath = path.join(process.cwd(), 'config', 'site-settings.json')
-
-  constructor(
-    @InjectRepository(Article)
-    private articleRepository: Repository<Article>,
-    @InjectRepository(ArticleDraft)
-    private draftRepository: Repository<ArticleDraft>,
-  ) {}
-
-  private extractGenFromValue(value: unknown): string | null {
-    const raw = String(value || '').trim()
-    if (!raw) return null
-
-    const fromUrl = raw.match(/\/stock\/[^/]+\/([a-zA-Z0-9]{8,32})\//)
-    if (fromUrl?.[1]) return fromUrl[1]
-
-    const fromStoredName = raw.match(/^([a-zA-Z0-9]{8,32})__/)
-    if (fromStoredName?.[1]) return fromStoredName[1]
-
-    const fromLegacyName = raw.match(/^([a-zA-Z0-9]{8,32})-\d+/)
-    if (fromLegacyName?.[1]) return fromLegacyName[1]
-
-    return null
-  }
-
-  private stripHtmlToText(input: unknown): string {
-    return String(input || '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;/gi, ' ')
-      .replace(/&amp;/gi, '&')
-      .replace(/&lt;/gi, '<')
-      .replace(/&gt;/gi, '>')
-      .replace(/&quot;/gi, '"')
-      .replace(/&#39;/gi, "'")
-      .replace(/\s+/g, ' ')
-      .trim()
-  }
-
-  private toSnakeCase(input: string): string {
-    return String(input || '')
-      .replace(/-/g, '_')
-      .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-      .toLowerCase()
-  }
-
-  private firstNonEmptyString(...values: unknown[]): string {
-    for (const value of values) {
-      const str = String(value ?? '')
-      if (str.trim() !== '') {
-        return str
-      }
+    private readonly logger = new Logger(ArticleService.name)
+    private readonly siteSettingsPath = path.join(process.cwd(), 'config', 'site-settings.json')
+    private readonly tableLookupMap: Record<string, TableLookupConfig> = {
     }
-    return ''
-  }
-
-  private getWysiwygStem(fieldName: string): string {
-    return String(fieldName || '')
-      .replace(/-wysiwyg$/i, '')
-      .replace(/_wysiwyg$/i, '')
-      .replace(/Wysiwyg$/, '')
-  }
-
-  private normalizeArticleInput(payload: Record<string, any>) {
-    const normalized = { ...payload }
-
-    const wysiwygEntries = Object.entries(payload || {}).filter(([key, value]) => {
-      if (value === undefined || value === null) return false
-      return /wysiwyg/i.test(key)
-    })
-
-    for (const [rawKey, rawValue] of wysiwygEntries) {
-      const stem = this.getWysiwygStem(rawKey)
-      const plainKey = `${this.toSnakeCase(stem)}_plain`
-      const painKey = `${this.toSnakeCase(stem)}_pain`
-      const plainText = this.stripHtmlToText(rawValue)
-      normalized[plainKey] = plainText
-      normalized[painKey] = plainText
+    private readonly listFieldMap: Record<string, keyof ArticleDraft> = {
+        article_id: 'articleId',
+        title: 'title',
+        short_description: 'shortDescription',
+        thumbnail: 'thumbnail',
+        obj_state: 'objState',
+        obj_lang: 'objLang',
+        obj_modified_date: 'objModifiedDate',
+        obj_created_date: 'objCreatedDate',
+        obj_content_id: 'objContentId',
     }
 
-    normalized.thumbnail = normalized.thumbnail ?? normalized.thumbnailName ?? normalized.thumbnail_name ?? ''
-    normalized.thumbnailGen = normalized.thumbnailGen ?? normalized.thumbnail_gen ?? ''
-    normalized.video = normalized.video ?? normalized.video_name ?? null
-    normalized.videoGen = normalized.videoGen ?? normalized.video_gen ?? null
-    normalized.file = normalized.file ?? normalized.document ?? normalized.file_name ?? null
-    normalized.fileGen = normalized.fileGen ?? normalized.file_gen ?? normalized.document_gen ?? null
+    constructor(
+        @InjectRepository(Article)
+        private mainRepository: Repository<Article>,
+        @InjectRepository(ArticleDraft)
+        private draftRepository: Repository<ArticleDraft>,
+    ) {}
 
-    const hasAnyWysiwygInput =
-      Object.prototype.hasOwnProperty.call(payload, 'content-wysiwyg') ||
-      Object.prototype.hasOwnProperty.call(payload, 'content_wysiwyg') ||
-      Object.prototype.hasOwnProperty.call(payload, 'contentWysiwyg') ||
-      wysiwygEntries.length > 0
-
-    const firstWysiwygValue = wysiwygEntries.length > 0 ? wysiwygEntries[0][1] : undefined
-    const resolvedWysiwyg = this.firstNonEmptyString(
-      normalized['content-wysiwyg'],
-      normalized.content_wysiwyg,
-      normalized.contentWysiwyg,
-      firstWysiwygValue,
-    )
-
-    if (hasAnyWysiwygInput) {
-      normalized.contentWysiwyg = resolvedWysiwyg
+    private resolveLang(lang?: string): string {
+        const normalized = String(lang || '').trim().toLowerCase()
+        return normalized || 'en'
     }
 
-    const hasAnyPlainInput =
-      Object.prototype.hasOwnProperty.call(payload, 'content-wysiwyg_plain') ||
-      Object.prototype.hasOwnProperty.call(payload, 'content_wysiwyg_plain') ||
-      Object.prototype.hasOwnProperty.call(payload, 'contentWysiwygPlain')
+    private async queryTableLookup(config: TableLookupConfig, lang: string): Promise<LookupOption[]> {
+        const labelColumn = config.labelColumn
+        const valueColumn = config.valueColumn
 
-    const resolvedPlain = this.firstNonEmptyString(
-      normalized['content-wysiwyg_plain'],
-      normalized.content_wysiwyg_plain,
-      normalized.contentWysiwygPlain,
-      hasAnyWysiwygInput ? this.stripHtmlToText(resolvedWysiwyg) : '',
-    )
+        const qb = this.draftRepository.manager
+            .createQueryBuilder()
+            .select(`${config.tableName}.${valueColumn}`, 'value')
+            .addSelect(`${config.tableName}.${labelColumn}`, 'label')
+            .from(config.tableName, config.tableName)
 
-    if (hasAnyPlainInput || hasAnyWysiwygInput) {
-      normalized.contentWysiwygPlain = resolvedPlain
-      normalized.content_plain = resolvedPlain
-      normalized.content_pain = resolvedPlain
+        const orderByColumn = config.orderBy?.column || labelColumn
+        const orderByDirection = String(config.orderBy?.direction || 'ASC').toUpperCase() === 'DESC' ? 'DESC' : 'ASC'
+
+        if (config.whereSql && config.whereSql.trim() !== '') {
+            qb.where(config.whereSql)
+        }
+
+        if (config.langColumn && lang !== '') {
+            qb.andWhere(`${config.tableName}.${config.langColumn} = :lang`, { lang })
+        }
+
+        qb.orderBy(`${config.tableName}.${orderByColumn}`, orderByDirection as 'ASC' | 'DESC')
+
+        const rows = await qb.getRawMany<{ value: string | number; label: string }>()
+
+        return rows.map((row) => ({
+            value: String(row.value),
+            label: String(row.label || row.value),
+        }))
     }
 
-    if ((!normalized.thumbnailAlt || String(normalized.thumbnailAlt).trim() === '') && normalized.thumbnail) {
-      normalized.thumbnailAlt = String(normalized.thumbnail).replace(/\.[^/.]+$/, '')
+    private toPositiveInt(value: unknown, fallback: number): number {
+        const parsed = Number(value)
+        if (!Number.isFinite(parsed)) return fallback
+        const normalized = Math.floor(parsed)
+        return normalized > 0 ? normalized : fallback
     }
 
-    if (!normalized.thumbnailGen && normalized.thumbnail) {
-      normalized.thumbnailGen = this.extractGenFromValue(normalized.thumbnail) || ''
+    private parseSearchFields(input: unknown): string[] {
+        if (Array.isArray(input)) {
+            return input.map((item) => String(item).trim()).filter(Boolean)
+        }
+
+        const raw = String(input ?? '').trim()
+        if (!raw) return []
+        return raw.split(',').map((item) => item.trim()).filter(Boolean)
     }
 
-    if (!normalized.videoGen && normalized.video) {
-      normalized.videoGen = this.extractGenFromValue(normalized.video) || null
+    private toStringArray(value: unknown): string[] {
+        if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean)
+        const raw = String(value ?? '').trim()
+        if (!raw) return []
+
+        try {
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed)) return parsed.map((item) => String(item).trim()).filter(Boolean)
+        } catch {
+            // ignore JSON parse errors and fallback to comma-split
+        }
+
+        return raw.split(',').map((item) => item.trim()).filter(Boolean)
     }
 
-    if (!normalized.fileGen && normalized.file) {
-      normalized.fileGen = this.extractGenFromValue(normalized.file) || null
+    private toObjectArray(value: unknown): Array<Record<string, any>> {
+        if (Array.isArray(value)) {
+            return value.filter((item) => item && typeof item === 'object') as Array<Record<string, any>>
+        }
+
+        const raw = String(value ?? '').trim()
+        if (!raw) return []
+
+        try {
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed)) {
+                return parsed.filter((item) => item && typeof item === 'object') as Array<Record<string, any>>
+            }
+        } catch {
+            // ignore
+        }
+
+        return []
     }
 
-    delete normalized.thumbnailName
-    delete normalized.thumbnail_name
-    delete normalized.thumbnail_gen
-    delete normalized.video_name
-    delete normalized.video_gen
-    delete normalized.file_name
-    delete normalized.file_gen
-    delete normalized.document
-    delete normalized.document_gen
-    delete normalized['content-wysiwyg']
-    delete normalized.content_wysiwyg
-    delete normalized['content-wysiwyg_plain']
-    delete normalized.content_wysiwyg_plain
-
-    return normalized
-  }
-
-  private async nextArticleId(): Promise<string> {
-    return OMUtilts.generateTimestampId()
-  }
-
-  private async nextRevision(contentId: string): Promise<number> {
-    const result = await this.draftRepository
-      .createQueryBuilder('d')
-      .select('MAX(d.objRev)', 'max')
-      .where('d.objContentId = :contentId', { contentId })
-      .getRawOne<{ max: string }>()
-    return (Number(result?.max) || 0) + 1
-  }
-
-  private isPublishedState(publish: unknown, objState?: string): boolean {
-    if (typeof publish === 'boolean') return publish
-    const normalized = String(objState || '').trim().toLowerCase()
-    return normalized === 'published' || normalized === 'publish'
-  }
-
-  private async getMaxRevision(): Promise<number> {
-    try {
-      const raw = await fs.readFile(this.siteSettingsPath, 'utf-8')
-      const parsed = JSON.parse(raw || '{}') as { maxRevision?: number }
-      const value = Number(parsed.maxRevision)
-      if (Number.isInteger(value) && value > 0) return value
-    } catch {
-      // fallback default
-    }
-    return 10
-  }
-
-  private async archiveCurrentRevision(existing: ArticleDraft, actorId?: number): Promise<void> {
-    await this.draftRepository.update(
-      {
-        articlesId: existing.articlesId,
-        objLang: existing.objLang,
-        objRev: existing.objRev,
-      },
-      {
-        objStatus: 'archive',
-        objModifiedBy: actorId ?? existing.objModifiedBy ?? existing.objCreatedBy,
-        objModifiedDate: new Date(),
-      },
-    )
-  }
-
-  private async trimRevisionWindow(contentId: string): Promise<void> {
-    const maxRevision = await this.getMaxRevision()
-    const rows = await this.draftRepository.find({
-      where: { objContentId: contentId },
-      order: { objRev: 'DESC', objModifiedDate: 'DESC' },
-    })
-
-    if (rows.length <= maxRevision) return
-
-    const overflow = rows.slice(maxRevision)
-    if (overflow.length === 0) return
-
-    await Promise.all(
-      overflow.map((row) =>
-        this.draftRepository.delete({
-          articlesId: row.articlesId,
-          objLang: row.objLang,
-          objRev: row.objRev,
-        }),
-      ),
-    )
-  }
-
-  private async findActiveDraftByAnyId(id: string): Promise<ArticleDraft | null> {
-    const normalizedId = String(id)
-    const canUseContentId = /^\d+$/.test(normalizedId)
-
-    return this.draftRepository
-      .createQueryBuilder('d')
-      .where('d.objStatus = :status', { status: 'active' })
-      .andWhere(canUseContentId ? '(d.articlesId = :id OR d.objContentId = :contentId)' : 'd.articlesId = :id', {
-        id: normalizedId,
-        contentId: normalizedId,
-      })
-      .orderBy('d.objRev', 'DESC')
-      .getOne()
-  }
-
-  private async resolveUserDisplayName(userId?: number | null): Promise<string> {
-    const id = Number(userId)
-    if (!Number.isInteger(id) || id <= 0) return '-'
-
-    const row = await this.draftRepository.manager
-      .createQueryBuilder()
-      .select('u.firstname', 'firstname')
-      .addSelect('u.lastname', 'lastname')
-      .addSelect('u.name', 'name')
-      .from('wcm_users', 'u')
-      .where('u.id = :id', { id })
-      .getRawOne<{ firstname?: string; lastname?: string; name?: string }>()
-
-    const first = String(row?.firstname || '').trim()
-    const last = String(row?.lastname || '').trim()
-    if (first || last) return `${first} ${last}`.trim()
-
-    const fallback = String(row?.name || '').trim()
-    return fallback || '-'
-  }
-
-  async create(createArticleDto: CreateArticleDto): Promise<ArticleDraft> {
-    const {
-      publish,
-      obj_status,
-      obj_state,
-      obj_lang,
-      obj_rev,
-      obj_content_id,
-      obj_published_by,
-      obj_modified_by,
-      obj_created_by,
-      articlesId,
-      ...rest
-    } = createArticleDto
-
-    const normalizedRest = this.normalizeArticleInput(rest as Record<string, any>)
-
-    if (articlesId) {
-      this.logger.warn(`[create] Ignoring client articlesId=${articlesId}; server will generate id.`)
-    }
-    if (obj_content_id) {
-      this.logger.warn(`[create] Ignoring client obj_content_id=${obj_content_id}; obj_content_id will match articlesId.`)
-    }
-    const newArticleId = await this.nextArticleId()
-    const contentId = newArticleId
-    const nextRev = obj_rev ?? (await this.nextRevision(contentId))
-    const publishFlag = this.isPublishedState(publish, obj_state)
-
-    const draft = this.draftRepository.create({
-      articlesId: newArticleId,
-      ...normalizedRest,
-      objStatus: obj_status || 'active',
-      objState: publishFlag ? 'published' : obj_state || 'draft',
-      objLang: obj_lang || 'en',
-      objRev: nextRev,
-      objContentId: contentId,
-      objCreatedBy: obj_created_by,
-      objModifiedBy: obj_modified_by ?? obj_created_by,
-      objPublishedDate: publishFlag ? new Date() : null,
-      objPublishedBy: publishFlag ? obj_published_by ?? obj_created_by ?? null : null,
-    })
-
-    const savedDraft = await this.draftRepository.save(draft)
-
-    if (publishFlag) {
-      const published = this.articleRepository.create({
-        articlesId: savedDraft.articlesId,
-        thumbnail: savedDraft.thumbnail,
-        thumbnailGen: savedDraft.thumbnailGen,
-        thumbnailAlt: savedDraft.thumbnailAlt,
-        video: savedDraft.video,
-        videoGen: savedDraft.videoGen,
-        file: savedDraft.file,
-        fileGen: savedDraft.fileGen,
-        title: savedDraft.title,
-        author: savedDraft.author,
-        date: savedDraft.date,
-        content: savedDraft.content,
-        contentWysiwyg: savedDraft.contentWysiwyg,
-        contentWysiwygPlain: savedDraft.contentWysiwygPlain,
-        brandColor: savedDraft.brandColor,
-        objLang: savedDraft.objLang,
-        objContentId: savedDraft.objContentId,
-        objCreatedDate: savedDraft.objCreatedDate,
-        objCreatedBy: savedDraft.objCreatedBy,
-        objPublishedDate: savedDraft.objPublishedDate,
-        objPublishedBy: savedDraft.objPublishedBy,
-      })
-      await this.articleRepository.save(published)
+    private normalizeKey(input: string): string {
+        return String(input || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
     }
 
-    return savedDraft
-  }
+    private extractCollections(payload: Record<string, any>): {
+        sanitizedRest: Record<string, any>
+        childCollectionRows: Record<string, Array<Record<string, any>>>
+        galleryCollectionRows: Record<string, Array<Record<string, any>>>
+        childCollectionProvided: Record<string, boolean>
+        galleryCollectionProvided: Record<string, boolean>
+    } {
+        const sanitizedRest = { ...payload }
+        const consumedKeys = new Set<string>()
+        const childCollectionRows: Record<string, Array<Record<string, any>>> = {
+        }
+        const galleryCollectionRows: Record<string, Array<Record<string, any>>> = {
+        }
+        const childCollectionProvided: Record<string, boolean> = {
+        }
+        const galleryCollectionProvided: Record<string, boolean> = {
+        }
 
-  async findAll(): Promise<ArticleDraft[]> {
-    return this.draftRepository.find({
-      where: { objStatus: 'active' },
-      order: {
-        objCreatedDate: 'DESC',
-      },
-    })
-  }
+        Object.entries(sanitizedRest).forEach(([rawKey, rawValue]) => {
+            const normalizedRawKey = this.normalizeKey(rawKey)
 
-  async getLookup(field?: string, lang?: string): Promise<{ field: string; lang: string; options: LookupOption[] }> {
-    const normalizedField = String(field || '')
-    const normalizedLang = String(lang || 'en')
+            if (normalizedRawKey.startsWith('__child_')) {
+                const suffix = this.normalizeKey(rawKey.replace(/^__child_/i, ''))
+            }
 
-    if (field === 'obj_lang') {
-      return {
-        field: normalizedField || 'obj_lang',
-        lang: normalizedLang,
-        options: [
-        { value: 'en', label: 'English' },
-        { value: 'th', label: 'Thai' },
-        ],
-      }
+
+            if (normalizedRawKey.startsWith('__gallery_')) {
+            const suffix = this.normalizeKey(rawKey.replace(/^__gallery_/i, ''))
+            }
+
+        })
+
+        Object.keys(sanitizedRest).forEach((key) => {
+            if (key.startsWith('__child_') || key.startsWith('__gallery_') || consumedKeys.has(key)) {
+                delete sanitizedRest[key]
+            }
+        })
+
+        return { sanitizedRest, childCollectionRows, galleryCollectionRows, childCollectionProvided, galleryCollectionProvided }
     }
 
-    if (field === 'obj_state') {
-      return {
-        field: normalizedField || 'obj_state',
-        lang: normalizedLang,
-        options: [
-        { value: 'publish', label: 'Publish' },
-        { value: 'draft', label: 'Draft' },
-        { value: 'unpublish', label: 'Unpublish' },
-        ],
-      }
+    private parseFilters(query: ListQueryInput): Record<string, string[]> {
+        const result: Record<string, string[]> = {}
+
+        const incomingFilters = query.filters
+        if (incomingFilters && typeof incomingFilters === 'object' && !Array.isArray(incomingFilters)) {
+            Object.entries(incomingFilters).forEach(([key, raw]) => {
+                const values = this.toStringArray(raw)
+                if (values.length > 0) result[key] = values
+            })
+        }
+
+        Object.entries(query).forEach(([key, rawValue]) => {
+            if (!key.startsWith('filter_')) return
+            const field = key.replace(/^filter_/, '').trim()
+            if (!field) return
+            const values = this.toStringArray(rawValue)
+            if (values.length > 0) result[field] = values
+        })
+
+        return result
     }
 
-    return { field: normalizedField, lang: normalizedLang, options: [] }
-  }
+    private normalizeQuery(query?: ListQueryInput): NormalizedListQuery {
+        const page = this.toPositiveInt(query?.page, 1)
+        const pageSize = Math.min(200, this.toPositiveInt(query?.pageSize, 15))
+        const search = String(query?.search ?? '').trim()
+        const searchFields = this.parseSearchFields(query?.searchFields)
+        const sortField = String(query?.sortField || 'obj_modified_date').trim()
+        const sortDirection = String(query?.sortDirection || 'desc').toUpperCase() === 'ASC' ? 'ASC' : 'DESC'
+        const filters = this.parseFilters(query || {})
 
-  async findOne(id: string): Promise<ArticleDraft | null> {
-    const draft = await this.findActiveDraftByAnyId(id)
-
-    if (!draft) return null
-
-    const modifierName = await this.resolveUserDisplayName(draft.objModifiedBy)
-    return {
-      ...draft,
-      obj_modified_by_name: modifierName,
-      objModifiedByName: modifierName,
-    } as ArticleDraft & Record<string, any>
-  }
-
-  async getRevisions(id: string): Promise<{ activeRevision: number | null; items: Array<Record<string, any>> }> {
-    const normalizedId = String(id)
-    const canUseContentId = /^\d+$/.test(normalizedId)
-
-    const latest = await this.draftRepository
-      .createQueryBuilder('d')
-      .where(canUseContentId ? '(d.articlesId = :id OR d.objContentId = :contentId)' : 'd.articlesId = :id', {
-        id: normalizedId,
-        contentId: normalizedId,
-      })
-      .orderBy('d.objRev', 'DESC')
-      .getOne()
-
-    if (!latest) return { activeRevision: null, items: [] }
-
-    const rows = await this.draftRepository.find({
-      where: { objContentId: String(latest.objContentId) },
-      order: { objRev: 'DESC', objModifiedDate: 'DESC' },
-    })
-
-    const userIds = Array.from(
-      new Set(
-        rows
-          .map((row) => Number(row.objModifiedBy))
-          .filter((value) => Number.isInteger(value) && value > 0),
-      ),
-    )
-
-    const displayNameMap = new Map<number, string>()
-    await Promise.all(
-      userIds.map(async (userId) => {
-        displayNameMap.set(userId, await this.resolveUserDisplayName(userId))
-      }),
-    )
-
-    const activeRow = rows.find((row) => row.objStatus === 'active') || null
-
-    return {
-      activeRevision: activeRow?.objRev ?? null,
-      items: rows.map((row) => ({
-        articles_id: row.articlesId,
-        obj_content_id: row.objContentId,
-        obj_lang: row.objLang,
-        obj_rev: row.objRev,
-        obj_status: row.objStatus,
-        obj_state: row.objState,
-        obj_modified_by: row.objModifiedBy,
-        obj_modified_by_name: displayNameMap.get(Number(row.objModifiedBy)) || '-',
-        obj_modified_date: row.objModifiedDate,
-        is_active: row.objStatus === 'active',
-      })),
-    }
-  }
-
-  async getRevisionSnapshot(id: string, rev: number, lang?: string): Promise<ArticleDraft | null> {
-    const normalizedId = String(id)
-    const canUseContentId = /^\d+$/.test(normalizedId)
-
-    const latest = await this.draftRepository
-      .createQueryBuilder('d')
-      .where(canUseContentId ? '(d.articlesId = :id OR d.objContentId = :contentId)' : 'd.articlesId = :id', {
-        id: normalizedId,
-        contentId: normalizedId,
-      })
-      .orderBy('d.objRev', 'DESC')
-      .getOne()
-
-    if (!latest) return null
-
-    const targetLang = String(lang || '').trim()
-    const qb = this.draftRepository
-      .createQueryBuilder('d')
-      .where('d.objContentId = :contentId', { contentId: String(latest.objContentId) })
-      .andWhere('d.objRev = :rev', { rev })
-
-    if (targetLang) {
-      qb.andWhere('d.objLang = :lang', { lang: targetLang })
+        return { page, pageSize, search, searchFields, sortField, sortDirection, filters }
     }
 
-    const row = await qb.orderBy('d.objModifiedDate', 'DESC').getOne()
-    if (!row) return null
-
-    const modifierName = await this.resolveUserDisplayName(row.objModifiedBy)
-    return {
-      ...row,
-      obj_modified_by_name: modifierName,
-      objModifiedByName: modifierName,
-    } as ArticleDraft & Record<string, any>
-  }
-
-  async update(id: string, updateArticleDto: UpdateArticleDto): Promise<ArticleDraft | null> {
-    const existing = await this.findActiveDraftByAnyId(id)
-    if (!existing) return null
-
-    const {
-      publish,
-      obj_status,
-      obj_state,
-      obj_lang,
-      obj_published_by,
-      obj_modified_by,
-      obj_content_id,
-      ...rest
-    } = updateArticleDto
-
-    const normalizedRest = this.normalizeArticleInput(rest as Record<string, any>)
-
-    if (obj_content_id && String(obj_content_id) !== String(existing.articlesId)) {
-      this.logger.warn(`[update] Ignoring client obj_content_id=${obj_content_id}; obj_content_id will match articlesId=${existing.articlesId}.`)
+    private resolveColumn(field: string): keyof ArticleDraft | undefined {
+        const raw = String(field || '').trim()
+        if (!raw) return undefined
+        return this.listFieldMap[raw]
     }
 
-    await this.archiveCurrentRevision(existing, obj_modified_by)
+    private applySearch(qb: SelectQueryBuilder<ArticleDraft>, term: string, fields: string[]): void {
+        if (!term) return
 
-    const contentId = String(existing.objContentId)
-    const nextRev = await this.nextRevision(contentId)
-    const publishFlag = this.isPublishedState(publish, obj_state)
+        const resolvedColumns = fields
+            .map((field) => this.resolveColumn(field))
+            .filter((field): field is keyof ArticleDraft => Boolean(field))
 
-    const merged = this.draftRepository.create({
-      ...existing,
-      ...normalizedRest,
-      objState: publishFlag ? 'published' : obj_state || existing.objState || 'draft',
-      objLang: obj_lang || existing.objLang || 'en',
-      objRev: nextRev,
-      objStatus: 'active',
-      objContentId: contentId,
-      objModifiedBy: obj_modified_by ?? existing.objModifiedBy ?? existing.objCreatedBy,
-      objPublishedDate: publishFlag ? (existing.objPublishedDate || new Date()) : null,
-      objPublishedBy: publishFlag ? obj_published_by ?? existing.objPublishedBy ?? existing.objCreatedBy : null,
-    })
+        const fallback = ['obj_state']
+            .map((field) => this.resolveColumn(field))
+            .filter((field): field is keyof ArticleDraft => Boolean(field))
 
-    const savedDraft = await this.draftRepository.save(merged)
+        const targets = resolvedColumns.length > 0 ? resolvedColumns : fallback
+        if (!targets.length) return
 
-    if (publishFlag) {
-      const published = this.articleRepository.create({
-        articlesId: savedDraft.articlesId,
-        thumbnail: savedDraft.thumbnail,
-        thumbnailGen: savedDraft.thumbnailGen,
-        thumbnailAlt: savedDraft.thumbnailAlt,
-        video: savedDraft.video,
-        videoGen: savedDraft.videoGen,
-        file: savedDraft.file,
-        fileGen: savedDraft.fileGen,
-        title: savedDraft.title,
-        author: savedDraft.author,
-        date: savedDraft.date,
-        content: savedDraft.content,
-        contentWysiwyg: savedDraft.contentWysiwyg,
-        contentWysiwygPlain: savedDraft.contentWysiwygPlain,
-        brandColor: savedDraft.brandColor,
-        objLang: savedDraft.objLang,
-        objContentId: savedDraft.objContentId,
-        objCreatedDate: savedDraft.objCreatedDate,
-        objCreatedBy: savedDraft.objCreatedBy,
-        objPublishedDate: savedDraft.objPublishedDate,
-        objPublishedBy: savedDraft.objPublishedBy,
-      })
-      await this.articleRepository.save(published)
-    } else {
-      await this.articleRepository.delete({ articlesId: savedDraft.articlesId })
+        qb.andWhere(
+            new Brackets((where) => {
+                targets.forEach((column, index) => {
+                    const clause = `LOWER(COALESCE(CAST(d.${String(column)} AS CHAR), '')) LIKE :searchTerm`
+                    if (index === 0) {
+                        where.where(clause, { searchTerm: `%${term.toLowerCase()}%` })
+                    } else {
+                        where.orWhere(clause, { searchTerm: `%${term.toLowerCase()}%` })
+                    }
+                })
+            }),
+        )
     }
 
-    await this.trimRevisionWindow(contentId)
+    private applyFilters(qb: SelectQueryBuilder<ArticleDraft>, filters: Record<string, string[]>): void {
+        Object.entries(filters).forEach(([field, values]) => {
+            if (!values.length) return
+            const column = this.resolveColumn(field)
+            if (!column) return
 
-    return savedDraft
-  }
+            const paramName = `filter_${String(column)}`
+            if (values.length === 1) {
+                qb.andWhere(`d.${String(column)} = :${paramName}`, { [paramName]: values[0] })
+            } else {
+                qb.andWhere(`d.${String(column)} IN (:...${paramName})`, { [paramName]: values })
+            }
+        })
+    }
 
-  async remove(id: string, actorId?: number): Promise<void> {
-    const existing = await this.findActiveDraftByAnyId(id)
-    if (!existing) return
+    private applySort(qb: SelectQueryBuilder<ArticleDraft>, sortField: string, sortDirection: 'ASC' | 'DESC'): void {
+        const column = this.resolveColumn(sortField) || this.resolveColumn('obj_modified_date') || 'objModifiedDate'
+        qb.orderBy(`d.${String(column)}`, sortDirection)
+    }
 
-    await this.archiveCurrentRevision(existing, actorId)
+    private buildListQuery(query?: ListQueryInput): { qb: SelectQueryBuilder<ArticleDraft>; normalized: NormalizedListQuery } {
+        const normalized = this.normalizeQuery(query)
+        const qb = this.draftRepository.createQueryBuilder('d')
 
-    const nextRev = await this.nextRevision(String(existing.objContentId))
-    const now = new Date()
-    const deleterId = actorId ?? existing.objModifiedBy ?? existing.objCreatedBy
+        qb.andWhere('d.objStatus = :activeStatus', { activeStatus: 'active' })
+        this.applySearch(qb, normalized.search, normalized.searchFields)
+        this.applyFilters(qb, normalized.filters)
+        this.applySort(qb, normalized.sortField, normalized.sortDirection)
 
-    await this.draftRepository.save(
-      this.draftRepository.create({
-        ...existing,
-        objStatus: 'delete',
-        objRev: nextRev,
-        objState: 'draft',
-        objModifiedBy: deleterId,
-        objModifiedDate: now,
-        objPublishedDate: null,
-        objPublishedBy: null,
-      }),
-    )
+        return { qb, normalized }
+    }
 
-    await this.articleRepository.delete({ articlesId: existing.articlesId })
-    await this.trimRevisionWindow(String(existing.objContentId))
+    private async nextId(): Promise<string> {
+        return OMUtilts.generateTimestampId()
+    }
 
-    this.logger.log(`[delete] id=${existing.articlesId} by=${deleterId}`)
-  }
+    private async nextRevision(contentId: string): Promise<number> {
+        const result = await this.draftRepository
+            .createQueryBuilder('d')
+            .select('MAX(d.objRev)', 'max')
+            .where('d.objContentId = :contentId', { contentId })
+            .getRawOne<{ max: string }>()
+        return (Number(result?.max) || 0) + 1
+    }
+
+    private async getMaxRevision(): Promise<number> {
+        try {
+            const raw = await fs.readFile(this.siteSettingsPath, 'utf-8')
+            const parsed = JSON.parse(raw || '{}') as { maxRevision?: number }
+            const value = Number(parsed.maxRevision)
+            if (Number.isInteger(value) && value > 0) return value
+        } catch {
+            // fallback default
+        }
+        return 10
+    }
+
+    private async trimRevisionWindow(contentId: string): Promise<void> {
+        const maxRevision = await this.getMaxRevision()
+        const rows = await this.draftRepository.find({
+            where: { objContentId: contentId } as any,
+            order: { objRev: 'DESC', objModifiedDate: 'DESC' } as any,
+        })
+
+        if (rows.length <= maxRevision) return
+
+        const overflow = rows.slice(maxRevision)
+        if (overflow.length === 0) return
+
+        for (const row of overflow) {
+            await this.draftRepository.delete({
+                articleId: (row as any).articleId,
+                objLang: (row as any).objLang,
+                objRev: (row as any).objRev,
+            } as any)
+        }
+    }
+
+    private shouldPublish(publishFlag: unknown, objState?: string): boolean {
+        if (typeof publishFlag === 'boolean') return publishFlag
+        const normalized = String(objState || '').trim().toLowerCase()
+        return normalized === 'publish' || normalized === 'published'
+    }
+
+    private normalizePayloadForSave(payload: Record<string, any>): Record<string, any> {
+        const normalized = { ...payload }
+
+        if (normalized['thumbnail_gen'] === undefined || normalized['thumbnail_gen'] === null) {
+            normalized['thumbnail_gen'] = normalized['thumbnail'] ? 'N' : ''
+        }
+
+        return normalized
+    }
+
+    private async loadDraftCollections(parentId: string, objRev: number): Promise<{
+        childCollectionRows: Record<string, Array<Record<string, any>>>
+        galleryCollectionRows: Record<string, Array<Record<string, any>>>
+    }> {
+        const childCollectionRows: Record<string, Array<Record<string, any>>> = {}
+        const galleryCollectionRows: Record<string, Array<Record<string, any>>> = {}
+
+
+        return { childCollectionRows, galleryCollectionRows }
+    }
+
+    private attachCollectionsToDraft(
+        draft: ArticleDraft,
+        childCollectionRows: Record<string, Array<Record<string, any>>>,
+        galleryCollectionRows: Record<string, Array<Record<string, any>>>,
+    ): ArticleDraft & Record<string, any> {
+        const hydrated: Record<string, any> = { ...draft }
+
+
+        return hydrated as ArticleDraft & Record<string, any>
+    }
+
+    private async findActiveDraftById(id: string): Promise<ArticleDraft | null> {
+        return this.draftRepository
+            .createQueryBuilder('d')
+            .where('d.objStatus = :status', { status: 'active' })
+            .andWhere('(d.articleId = :id OR d.objContentId = :id)', { id })
+            .orderBy('d.objRev', 'DESC')
+            .getOne()
+    }
+
+    private async replaceDraftCollections(parentId: string, draft: ArticleDraft, childCollectionRows: Record<string, Array<Record<string, any>>>, galleryCollectionRows: Record<string, Array<Record<string, any>>>): Promise<void> {
+    }
+
+    private async replacePublishedCollections(parentId: string, draft: ArticleDraft, childCollectionRows: Record<string, Array<Record<string, any>>>, galleryCollectionRows: Record<string, Array<Record<string, any>>>): Promise<void> {
+    }
+
+    async create(createDto: CreateArticleDto): Promise<ArticleDraft> {
+        const { publish, obj_state, obj_status, obj_lang, obj_rev, obj_created_by, obj_modified_by, obj_published_by, ...rest } = createDto as any
+        const { sanitizedRest, childCollectionRows, galleryCollectionRows } = this.extractCollections(rest as Record<string, any>)
+        const newId = await this.nextId()
+        const contentId = newId
+        const nextRev = obj_rev ?? (await this.nextRevision(contentId))
+        const publishFlag = this.shouldPublish(publish, obj_state)
+        const nowUtc = OMDatetime.getUtcNow()
+
+        const normalizedRest = this.normalizePayloadForSave(sanitizedRest)
+
+        const draft = this.draftRepository.create({
+            ...normalizedRest,
+            articleId: newId,
+            objStatus: obj_status || 'active',
+            objState: publishFlag ? 'published' : obj_state || 'draft',
+            objLang: obj_lang || 'en',
+            objRev: nextRev,
+            objContentId: contentId,
+            objCreatedDate: nowUtc,
+            objCreatedBy: obj_created_by,
+            objModifiedDate: nowUtc,
+            objModifiedBy: obj_modified_by ?? obj_created_by,
+            objPublishedDate: publishFlag ? nowUtc : null,
+            objPublishedBy: publishFlag ? obj_published_by ?? obj_created_by ?? null : null,
+        } as any) as unknown as ArticleDraft
+
+        const savedDraft: ArticleDraft = await this.draftRepository.save(draft as ArticleDraft)
+        await this.replaceDraftCollections((savedDraft as any).articleId, savedDraft, childCollectionRows, galleryCollectionRows)
+
+        if (publishFlag) {
+            const published = this.mainRepository.create(savedDraft as unknown as Article)
+            await this.mainRepository.save(published)
+            await this.replacePublishedCollections((savedDraft as any).articleId, savedDraft, childCollectionRows, galleryCollectionRows)
+        }
+
+        await this.trimRevisionWindow(contentId)
+
+        return savedDraft
+    }
+
+    async findAll(query?: ListQueryInput): Promise<ArticleDraft[] | { items: ArticleDraft[]; total: number; page: number; pageSize: number }> {
+        if (!query || Object.keys(query).length === 0) {
+            return this.draftRepository.find({ where: { objStatus: 'active' } as any, order: { objModifiedDate: 'DESC' } as any })
+        }
+
+        const { qb, normalized } = this.buildListQuery(query)
+        qb.skip((normalized.page - 1) * normalized.pageSize)
+        qb.take(normalized.pageSize)
+
+        const [items, total] = await qb.getManyAndCount()
+        return { items, total, page: normalized.page, pageSize: normalized.pageSize }
+    }
+
+    async findOne(id: string): Promise<ArticleDraft | null> {
+        const row = await this.findActiveDraftById(id)
+
+        if (!row) return null
+        const { childCollectionRows, galleryCollectionRows } = await this.loadDraftCollections(
+            String((row as any).articleId),
+            Number((row as any).objRev),
+        )
+        return this.attachCollectionsToDraft(row, childCollectionRows, galleryCollectionRows)
+    }
+
+    async update(id: string, updateDto: UpdateArticleDto): Promise<ArticleDraft | null> {
+        const existing = await this.findActiveDraftById(id)
+        if (!existing) return null
+
+        const { publish, obj_state, obj_lang, obj_modified_by, obj_published_by, ...rest } = updateDto as any
+        const { sanitizedRest, childCollectionRows, galleryCollectionRows, childCollectionProvided, galleryCollectionProvided } = this.extractCollections(rest as Record<string, any>)
+
+        await this.draftRepository.update(
+            { articleId: (existing as any).articleId, objLang: existing.objLang, objRev: existing.objRev } as any,
+            { objStatus: 'archive', objModifiedBy: obj_modified_by ?? (existing as any).objModifiedBy, objModifiedDate: OMDatetime.getUtcNow() } as any,
+        )
+
+        const contentId = String((existing as any).objContentId)
+        const nextRev = await this.nextRevision(contentId)
+        const publishFlag = this.shouldPublish(publish, obj_state)
+        const nowUtc = OMDatetime.getUtcNow()
+
+        const normalizedRest = this.normalizePayloadForSave(sanitizedRest)
+
+        const merged = this.draftRepository.create({
+            ...existing,
+            ...normalizedRest,
+            objState: publishFlag ? 'published' : obj_state || (existing as any).objState || 'draft',
+            objLang: obj_lang || (existing as any).objLang || 'en',
+            objRev: nextRev,
+            objModifiedDate: nowUtc,
+            objModifiedBy: obj_modified_by ?? (existing as any).objModifiedBy,
+            objPublishedDate: publishFlag ? nowUtc : null,
+            objPublishedBy: publishFlag ? obj_published_by ?? (existing as any).objCreatedBy : null,
+        } as any) as unknown as ArticleDraft
+
+        const savedDraft: ArticleDraft = await this.draftRepository.save(merged as ArticleDraft)
+
+        const hasChildPayload = Object.values(childCollectionProvided).some(Boolean)
+        const hasGalleryPayload = Object.values(galleryCollectionProvided).some(Boolean)
+
+        const loadedPrevious = (!hasChildPayload && !hasGalleryPayload)
+            ? await this.loadDraftCollections(String((existing as any).articleId), Number((existing as any).objRev))
+            : { childCollectionRows: {}, galleryCollectionRows: {} }
+
+        const resolvedChildCollectionRows = hasChildPayload
+            ? childCollectionRows
+            : (loadedPrevious.childCollectionRows || {})
+
+        const resolvedGalleryCollectionRows = hasGalleryPayload
+            ? galleryCollectionRows
+            : (loadedPrevious.galleryCollectionRows || {})
+
+        await this.replaceDraftCollections(String((savedDraft as any).articleId), savedDraft, resolvedChildCollectionRows, resolvedGalleryCollectionRows)
+
+        if (publishFlag) {
+            await this.mainRepository.save(this.mainRepository.create(savedDraft as unknown as Article))
+            await this.replacePublishedCollections(String((savedDraft as any).articleId), savedDraft, resolvedChildCollectionRows, resolvedGalleryCollectionRows)
+        } else {
+            await this.mainRepository.delete({ articleId: (savedDraft as any).articleId } as any)
+        }
+
+        await this.trimRevisionWindow(contentId)
+
+        return savedDraft
+    }
+
+    async remove(id: string, actorId?: number): Promise<void> {
+        const existing = await this.findActiveDraftById(id)
+        if (!existing) return
+
+        const nextRev = await this.nextRevision(String((existing as any).objContentId))
+
+        await this.draftRepository.save(
+            this.draftRepository.create({
+                ...existing,
+                objStatus: 'delete',
+                objState: 'draft',
+                objRev: nextRev,
+                objModifiedDate: OMDatetime.getUtcNow(),
+                objModifiedBy: actorId ?? (existing as any).objModifiedBy ?? (existing as any).objCreatedBy,
+                objPublishedDate: null,
+                objPublishedBy: null,
+            } as any),
+        )
+
+        await this.mainRepository.delete({ articleId: (existing as any).articleId } as any)
+
+        await this.trimRevisionWindow(String((existing as any).objContentId))
+    }
+
+    async runListAction(payload?: ListActionInput, actorId?: number): Promise<{ action: string; requested: number; success: number; failed: number; failedIds: string[] }> {
+        const action = String(payload?.action || '').trim().toLowerCase()
+        const ids = Array.isArray(payload?.ids)
+            ? payload!.ids.map((id) => String(id ?? '').trim()).filter(Boolean)
+            : []
+
+        if (!action || ids.length === 0) {
+            return { action, requested: ids.length, success: 0, failed: ids.length, failedIds: ids }
+        }
+
+        let success = 0
+        const failedIds: string[] = []
+
+        if (action === 'delete') {
+            for (const id of ids) {
+                try {
+                    await this.remove(id, actorId)
+                    success += 1
+                } catch {
+                    failedIds.push(id)
+                }
+            }
+
+            return {
+                action,
+                requested: ids.length,
+                success,
+                failed: failedIds.length,
+                failedIds,
+            }
+        }
+
+        return { action, requested: ids.length, success: 0, failed: ids.length, failedIds: ids }
+    }
+
+    async exportRows(payload?: ListQueryInput & { fields?: string[] }): Promise<{ fields: string[]; total: number; items: Record<string, any>[] }> {
+        const requestedFields = Array.isArray(payload?.fields)
+            ? payload?.fields.map((field) => String(field || '').trim()).filter(Boolean)
+            : []
+
+        const selectedPairs = requestedFields
+            .map((field) => ({ field, column: this.resolveColumn(field) }))
+            .filter((item): item is { field: string; column: keyof ArticleDraft } => Boolean(item.column))
+
+        const fallbackFields = ['article_id', 'obj_state', 'obj_lang', 'obj_modified_date']
+        const pairs = selectedPairs.length > 0
+            ? selectedPairs
+            : fallbackFields
+                    .map((field) => ({ field, column: this.resolveColumn(field) }))
+                    .filter((item): item is { field: string; column: keyof ArticleDraft } => Boolean(item.column))
+
+        const { qb } = this.buildListQuery(payload)
+        const rows = await qb.getMany()
+
+        const items = rows.map((row) => {
+            const output: Record<string, any> = {}
+            pairs.forEach(({ field, column }) => {
+                output[field] = (row as any)[column]
+            })
+            return output
+        })
+
+        return {
+            fields: pairs.map((item) => item.field),
+            total: items.length,
+            items,
+        }
+    }
+
+    async getLookup(field?: string, lang?: string): Promise<LookupResponse> {
+        const normalizedField = String(field || '')
+        const normalizedLang = this.resolveLang(lang)
+
+        const map: Record<string, Array<{ value: string; label: string }>> = {
+        }
+
+        if (this.tableLookupMap[normalizedField]) {
+            const options = await this.queryTableLookup(this.tableLookupMap[normalizedField], normalizedLang)
+            return {
+                field: normalizedField,
+                lang: normalizedLang,
+                options,
+            }
+        }
+
+        return {
+            field: normalizedField,
+            lang: normalizedLang,
+            options: map[normalizedField] || [],
+        }
+    }
+
+    async getRevisions(id: string): Promise<{ activeRevision: number | null; items: Array<Record<string, any>> }> {
+        const current = await this.findActiveDraftById(id)
+        const contentId = String((current as any)?.objContentId || id || '').trim()
+        if (!contentId) {
+            return { activeRevision: null, items: [] }
+        }
+
+        const rows = await this.draftRepository
+            .createQueryBuilder('d')
+            .where('d.objContentId = :contentId', { contentId })
+            .orderBy('d.objRev', 'DESC')
+            .addOrderBy('d.objModifiedDate', 'DESC')
+            .getMany()
+
+        const items = rows.map((row) => ({
+            article_id: (row as any).articleId,
+            obj_content_id: (row as any).objContentId,
+            obj_lang: (row as any).objLang,
+            obj_rev: (row as any).objRev,
+            obj_status: (row as any).objStatus,
+            obj_state: (row as any).objState,
+            obj_modified_by: (row as any).objModifiedBy,
+            obj_modified_by_name: '-',
+            obj_modified_date: (row as any).objModifiedDate,
+            obj_published_date: (row as any).objPublishedDate,
+            is_active: String((row as any).objStatus || '').toLowerCase() === 'active',
+        }))
+
+        return {
+            activeRevision: current ? Number((current as any).objRev || 0) : null,
+            items,
+        }
+    }
+
+    async getRevisionSnapshot(id: string, rev: number, lang?: string): Promise<ArticleDraft | null> {
+        const normalizedRev = Number(rev) || 0
+        if (normalizedRev <= 0) return null
+
+        const current = await this.findActiveDraftById(id)
+        const contentId = String((current as any)?.objContentId || id || '').trim()
+        if (!contentId) return null
+
+        const qb = this.draftRepository
+            .createQueryBuilder('d')
+            .where('d.objContentId = :contentId', { contentId })
+            .andWhere('d.objRev = :rev', { rev: normalizedRev })
+
+        const normalizedLang = String(lang || '').trim()
+        if (normalizedLang) {
+            qb.andWhere('d.objLang = :lang', { lang: normalizedLang })
+        }
+
+        const row = await qb
+            .orderBy('d.objModifiedDate', 'DESC')
+            .getOne()
+
+        if (!row) return null
+
+        const { childCollectionRows, galleryCollectionRows } = await this.loadDraftCollections(
+            String((row as any).articleId),
+            Number((row as any).objRev),
+        )
+
+        return this.attachCollectionsToDraft(row, childCollectionRows, galleryCollectionRows)
+    }
 }
