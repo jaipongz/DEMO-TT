@@ -46,12 +46,6 @@ export class DemoJpTestController {
     return this._service.exportRows(body)
   }
 
-  @Post('lookup')
-  @ApiOperation({ summary: 'Get lookup options by field' })
-  @ApiResponse({ status: 200, description: 'Lookup options' })
-  async lookup(@Body() body: { field?: string; lang?: string }) {
-    return this._service.getLookup(body?.field, body?.lang)
-  }
 
   @Post('actions')
   @UseGuards(JwtAuthGuard)
