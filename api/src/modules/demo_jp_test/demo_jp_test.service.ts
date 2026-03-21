@@ -509,27 +509,30 @@ export class DemoJpTestService {
     ): DemoJpTestDraft & Record<string, any> {
         const hydrated: Record<string, any> = { ...draft }
 
-        hydrated['__child_demo_jp_child'] = childCollectionRows['demo_jp_child'] || []
         hydrated['demo_jp_child'] = childCollectionRows['demo_jp_child'] || []
-    hydrated['demo_jp_child_list'] = childCollectionRows['demo_jp_child'] || []
-    hydrated['child_list'] = childCollectionRows['demo_jp_child'] || []
-        hydrated['__gallery_demo_jp_gallery'] = (galleryCollectionRows['demo_jp_gallery'] || []).map((row) => ({
+        hydrated['demo_jp_gallery'] = (galleryCollectionRows['demo_jp_gallery'] || []).map((row) => ({
             file: String((row as any).file || ''),
             file_gen: String((row as any).file_gen || ''),
             type: String((row as any).type || 'image'),
             priority: Number((row as any).priority ?? 0) || 0,
         }))
-        hydrated['demo_jp_gallery'] = hydrated['__gallery_demo_jp_gallery']
-    hydrated['gallery'] = hydrated['__gallery_demo_jp_gallery']
-        hydrated['__gallery_korea_gallery'] = (galleryCollectionRows['korea_gallery'] || []).map((row) => ({
+        hydrated['korea_gallery'] = (galleryCollectionRows['korea_gallery'] || []).map((row) => ({
             file: String((row as any).file || ''),
             file_gen: String((row as any).file_gen || ''),
             type: String((row as any).type || 'image'),
             priority: Number((row as any).priority ?? 0) || 0,
         }))
-        hydrated['korea_gallery'] = hydrated['__gallery_korea_gallery']
 
         return hydrated as DemoJpTestDraft & Record<string, any>
+    }
+
+    private async findActiveDraftById(id: string): Promise<DemoJpTestDraft | null> {
+        return this.draftRepository
+            .createQueryBuilder('d')
+            .where('d.objStatus = :status', { status: 'active' })
+            .andWhere('(d.demoJpTestId = :id OR d.objContentId = :id)', { id })
+            .orderBy('d.objRev', 'DESC')
+            .getOne()
     }
 
     private async replaceDraftCollections(parentId: string, draft: DemoJpTestDraft, childCollectionRows: Record<string, Array<Record<string, any>>>, galleryCollectionRows: Record<string, Array<Record<string, any>>>): Promise<void> {
@@ -695,12 +698,7 @@ export class DemoJpTestService {
     }
 
     async findOne(id: string): Promise<DemoJpTestDraft | null> {
-        const row = await this.draftRepository
-            .createQueryBuilder('d')
-            .where('d.objStatus = :status', { status: 'active' })
-            .andWhere('(d.demoJpTestId = :id OR d.objContentId = :id)', { id })
-            .orderBy('d.objRev', 'DESC')
-            .getOne()
+        const row = await this.findActiveDraftById(id)
 
         if (!row) return null
         const { childCollectionRows, galleryCollectionRows } = await this.loadDraftCollections(
@@ -711,7 +709,7 @@ export class DemoJpTestService {
     }
 
     async update(id: string, updateDto: UpdateDemoJpTestDto): Promise<DemoJpTestDraft | null> {
-        const existing = await this.findOne(id)
+        const existing = await this.findActiveDraftById(id)
         if (!existing) return null
 
         const { publish, obj_state, obj_lang, obj_modified_by, obj_published_by, ...rest } = updateDto as any
@@ -774,7 +772,7 @@ export class DemoJpTestService {
     }
 
     async remove(id: string, actorId?: number): Promise<void> {
-        const existing = await this.findOne(id)
+        const existing = await this.findActiveDraftById(id)
         if (!existing) return
 
         const nextRev = await this.nextRevision(String((existing as any).objContentId))
@@ -910,7 +908,7 @@ export class DemoJpTestService {
     }
 
     async getRevisions(id: string): Promise<{ activeRevision: number | null; items: Array<Record<string, any>> }> {
-        const current = await this.findOne(id)
+        const current = await this.findActiveDraftById(id)
         const contentId = String((current as any)?.objContentId || id || '').trim()
         if (!contentId) {
             return { activeRevision: null, items: [] }
@@ -946,7 +944,7 @@ export class DemoJpTestService {
         const normalizedRev = Number(rev) || 0
         if (normalizedRev <= 0) return null
 
-        const current = await this.findOne(id)
+        const current = await this.findActiveDraftById(id)
         const contentId = String((current as any)?.objContentId || id || '').trim()
         if (!contentId) return null
 
