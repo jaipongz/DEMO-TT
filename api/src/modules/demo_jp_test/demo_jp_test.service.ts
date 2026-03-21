@@ -502,6 +502,36 @@ export class DemoJpTestService {
         return { childCollectionRows, galleryCollectionRows }
     }
 
+    private attachCollectionsToDraft(
+        draft: DemoJpTestDraft,
+        childCollectionRows: Record<string, Array<Record<string, any>>>,
+        galleryCollectionRows: Record<string, Array<Record<string, any>>>,
+    ): DemoJpTestDraft & Record<string, any> {
+        const hydrated: Record<string, any> = { ...draft }
+
+        hydrated['__child_demo_jp_child'] = childCollectionRows['demo_jp_child'] || []
+        hydrated['demo_jp_child'] = childCollectionRows['demo_jp_child'] || []
+    hydrated['demo_jp_child_list'] = childCollectionRows['demo_jp_child'] || []
+    hydrated['child_list'] = childCollectionRows['demo_jp_child'] || []
+        hydrated['__gallery_demo_jp_gallery'] = (galleryCollectionRows['demo_jp_gallery'] || []).map((row) => ({
+            file: String((row as any).file || ''),
+            file_gen: String((row as any).file_gen || ''),
+            type: String((row as any).type || 'image'),
+            priority: Number((row as any).priority ?? 0) || 0,
+        }))
+        hydrated['demo_jp_gallery'] = hydrated['__gallery_demo_jp_gallery']
+    hydrated['gallery'] = hydrated['__gallery_demo_jp_gallery']
+        hydrated['__gallery_korea_gallery'] = (galleryCollectionRows['korea_gallery'] || []).map((row) => ({
+            file: String((row as any).file || ''),
+            file_gen: String((row as any).file_gen || ''),
+            type: String((row as any).type || 'image'),
+            priority: Number((row as any).priority ?? 0) || 0,
+        }))
+        hydrated['korea_gallery'] = hydrated['__gallery_korea_gallery']
+
+        return hydrated as DemoJpTestDraft & Record<string, any>
+    }
+
     private async replaceDraftCollections(parentId: string, draft: DemoJpTestDraft, childCollectionRows: Record<string, Array<Record<string, any>>>, galleryCollectionRows: Record<string, Array<Record<string, any>>>): Promise<void> {
         await this.demo_jp_childDraftRepository.delete({ objParentId: parentId, objRev: draft.objRev } as any)
 
@@ -673,7 +703,11 @@ export class DemoJpTestService {
             .getOne()
 
         if (!row) return null
-        return row
+        const { childCollectionRows, galleryCollectionRows } = await this.loadDraftCollections(
+            String((row as any).demoJpTestId),
+            Number((row as any).objRev),
+        )
+        return this.attachCollectionsToDraft(row, childCollectionRows, galleryCollectionRows)
     }
 
     async update(id: string, updateDto: UpdateDemoJpTestDto): Promise<DemoJpTestDraft | null> {
@@ -926,8 +960,17 @@ export class DemoJpTestService {
             qb.andWhere('d.objLang = :lang', { lang: normalizedLang })
         }
 
-        return qb
+        const row = await qb
             .orderBy('d.objModifiedDate', 'DESC')
             .getOne()
+
+        if (!row) return null
+
+        const { childCollectionRows, galleryCollectionRows } = await this.loadDraftCollections(
+            String((row as any).demoJpTestId),
+            Number((row as any).objRev),
+        )
+
+        return this.attachCollectionsToDraft(row, childCollectionRows, galleryCollectionRows)
     }
 }
