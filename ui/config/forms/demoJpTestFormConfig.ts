@@ -5,54 +5,6 @@ export const demoJpTestFormConfig: FormConfig = {
   "master_field": "title",
   "box": [
     {
-      "label": "Demo JP - Primitive Types",
-      "width": 50,
-      "fields": [
-        {
-          "field": "title",
-          "name": "Title (text)",
-          "width": 100,
-          "type": "text",
-          "required": true
-        },
-        {
-          "field": "email",
-          "name": "Email (email)",
-          "width": 50,
-          "type": "email",
-          "required": false
-        },
-        {
-          "field": "age",
-          "name": "Age (number)",
-          "width": 50,
-          "type": "number",
-          "required": false
-        },
-        {
-          "field": "brand_color",
-          "name": "Brand Color (color)",
-          "width": 100,
-          "type": "color",
-          "required": false
-        },
-        {
-          "field": "published_date",
-          "name": "Published Date (date)",
-          "width": 100,
-          "type": "date",
-          "required": false
-        },
-        {
-          "field": "published_at",
-          "name": "Published At (datetime)",
-          "width": 100,
-          "type": "datetime",
-          "required": false
-        }
-      ]
-    },
-    {
       "label": "Demo JP - Lookup Fields",
       "width": 50,
       "fields": [
@@ -141,6 +93,54 @@ export const demoJpTestFormConfig: FormConfig = {
               "value": "false"
             }
           ]
+        }
+      ]
+    },
+    {
+      "label": "Demo JP - Primitive Types",
+      "width": 50,
+      "fields": [
+        {
+          "field": "title",
+          "name": "Title (text)",
+          "width": 100,
+          "type": "text",
+          "required": true
+        },
+        {
+          "field": "email",
+          "name": "Email (email)",
+          "width": 50,
+          "type": "email",
+          "required": false
+        },
+        {
+          "field": "age",
+          "name": "Age (number)",
+          "width": 50,
+          "type": "number",
+          "required": false
+        },
+        {
+          "field": "brand_color",
+          "name": "Brand Color (color)",
+          "width": 100,
+          "type": "color",
+          "required": false
+        },
+        {
+          "field": "published_date",
+          "name": "Published Date (date)",
+          "width": 100,
+          "type": "date",
+          "required": false
+        },
+        {
+          "field": "published_at",
+          "name": "Published At (datetime)",
+          "width": 100,
+          "type": "datetime",
+          "required": false
         }
       ]
     },
