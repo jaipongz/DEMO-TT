@@ -7,6 +7,12 @@ import { DemoJpTest } from './demo_jp_test.entity'
 import { DemoJpTestDraft } from './demo_jp_test-draft.entity'
 import { CreateDemoJpTestDto } from './dto/create-demo_jp_test.dto'
 import { UpdateDemoJpTestDto } from './dto/update-demo_jp_test.dto'
+import { DemoJpChild } from './demo_jp_child.entity'
+import { DemoJpChildDraft } from './demo_jp_child-draft.entity'
+import { DemoJpGallery } from './demo_jp_gallery.entity'
+import { DemoJpGalleryDraft } from './demo_jp_gallery-draft.entity'
+import { KoreaGallery } from './korea_gallery.entity'
+import { KoreaGalleryDraft } from './korea_gallery-draft.entity'
 import { OMDatetime } from '../../common/utils/OMDatetime.util'
 import { OMUtilts } from '../../common/utils/OMUtilts.util'
 
@@ -129,6 +135,18 @@ export class DemoJpTestService {
         private mainRepository: Repository<DemoJpTest>,
         @InjectRepository(DemoJpTestDraft)
         private draftRepository: Repository<DemoJpTestDraft>,
+        @InjectRepository(DemoJpChild)
+        private demo_jp_childRepository: Repository<DemoJpChild>,
+        @InjectRepository(DemoJpChildDraft)
+        private demo_jp_childDraftRepository: Repository<DemoJpChildDraft>,
+        @InjectRepository(DemoJpGallery)
+        private demo_jp_galleryRepository: Repository<DemoJpGallery>,
+        @InjectRepository(DemoJpGalleryDraft)
+        private demo_jp_galleryDraftRepository: Repository<DemoJpGalleryDraft>,
+        @InjectRepository(KoreaGallery)
+        private korea_galleryRepository: Repository<KoreaGallery>,
+        @InjectRepository(KoreaGalleryDraft)
+        private korea_galleryDraftRepository: Repository<KoreaGalleryDraft>,
     ) {}
 
     private resolveLang(lang?: string): string {
@@ -197,6 +215,58 @@ export class DemoJpTestService {
         }
 
         return raw.split(',').map((item) => item.trim()).filter(Boolean)
+    }
+
+    private toObjectArray(value: unknown): Array<Record<string, any>> {
+        if (Array.isArray(value)) {
+            return value.filter((item) => item && typeof item === 'object') as Array<Record<string, any>>
+        }
+
+        const raw = String(value ?? '').trim()
+        if (!raw) return []
+
+        try {
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed)) {
+                return parsed.filter((item) => item && typeof item === 'object') as Array<Record<string, any>>
+            }
+        } catch {
+            // ignore
+        }
+
+        return []
+    }
+
+    private extractCollections(payload: Record<string, any>): {
+        sanitizedRest: Record<string, any>
+        childCollectionRows: Record<string, Array<Record<string, any>>>
+        galleryCollectionRows: Record<string, Array<Record<string, any>>>
+        childCollectionProvided: Record<string, boolean>
+        galleryCollectionProvided: Record<string, boolean>
+    } {
+        const sanitizedRest = { ...payload }
+        const childCollectionRows: Record<string, Array<Record<string, any>>> = {}
+        const galleryCollectionRows: Record<string, Array<Record<string, any>>> = {}
+        const childCollectionProvided: Record<string, boolean> = {}
+        const galleryCollectionProvided: Record<string, boolean> = {}
+
+        childCollectionProvided['demo_jp_child'] = Object.prototype.hasOwnProperty.call(sanitizedRest, '__child_demo_jp_child')
+        childCollectionRows['demo_jp_child'] = this.toObjectArray(sanitizedRest['__child_demo_jp_child'])
+        delete sanitizedRest['__child_demo_jp_child']
+        galleryCollectionProvided['demo_jp_gallery'] = Object.prototype.hasOwnProperty.call(sanitizedRest, '__gallery_demo_jp_gallery')
+        galleryCollectionRows['demo_jp_gallery'] = this.toObjectArray(sanitizedRest['__gallery_demo_jp_gallery'])
+        delete sanitizedRest['__gallery_demo_jp_gallery']
+        galleryCollectionProvided['korea_gallery'] = Object.prototype.hasOwnProperty.call(sanitizedRest, '__gallery_korea_gallery')
+        galleryCollectionRows['korea_gallery'] = this.toObjectArray(sanitizedRest['__gallery_korea_gallery'])
+        delete sanitizedRest['__gallery_korea_gallery']
+
+        Object.keys(sanitizedRest).forEach((key) => {
+            if (key.startsWith('__child_') || key.startsWith('__gallery_')) {
+                delete sanitizedRest[key]
+            }
+        })
+
+        return { sanitizedRest, childCollectionRows, galleryCollectionRows, childCollectionProvided, galleryCollectionProvided }
     }
 
     private parseFilters(query: ListQueryInput): Record<string, string[]> {
@@ -354,15 +424,176 @@ export class DemoJpTestService {
         return normalized
     }
 
+    private async loadDraftCollections(parentId: string, objRev: number): Promise<{
+        childCollectionRows: Record<string, Array<Record<string, any>>>
+        galleryCollectionRows: Record<string, Array<Record<string, any>>>
+    }> {
+        const childCollectionRows: Record<string, Array<Record<string, any>>> = {}
+        const galleryCollectionRows: Record<string, Array<Record<string, any>>> = {}
+
+        {
+            const rows = await this.demo_jp_childDraftRepository.find({ where: { objParentId: parentId, objRev } as any })
+            childCollectionRows['demo_jp_child'] = rows.map((row) => {
+                const raw = row as unknown as Record<string, any>
+                const {
+                    demoJpChildId,
+                    objParentId,
+                    objStatus,
+                    objState,
+                    objLang,
+                    objRev,
+                    objContentId,
+                    objCreatedDate,
+                    objCreatedBy,
+                    objModifiedDate,
+                    objModifiedBy,
+                    objPublishedDate,
+                    objPublishedBy,
+                    ...rest
+                } = raw
+                return rest
+            })
+        }
+        {
+            const rows = await this.demo_jp_galleryDraftRepository.find({ where: { objParentId: parentId, objRev } as any, order: { objPriority: 'ASC' } as any })
+            galleryCollectionRows['demo_jp_gallery'] = rows.map((row) => ({
+                file: (row as any).objFile,
+                file_gen: (row as any).objFileGen,
+                priority: (row as any).objPriority,
+            }))
+        }
+        {
+            const rows = await this.korea_galleryDraftRepository.find({ where: { objParentId: parentId, objRev } as any, order: { objPriority: 'ASC' } as any })
+            galleryCollectionRows['korea_gallery'] = rows.map((row) => ({
+                file: (row as any).objFile,
+                file_gen: (row as any).objFileGen,
+                priority: (row as any).objPriority,
+            }))
+        }
+
+        return { childCollectionRows, galleryCollectionRows }
+    }
+
+    private async replaceDraftCollections(parentId: string, draft: DemoJpTestDraft, childCollectionRows: Record<string, Array<Record<string, any>>>, galleryCollectionRows: Record<string, Array<Record<string, any>>>): Promise<void> {
+        await this.demo_jp_childDraftRepository.delete({ objParentId: parentId, objRev: draft.objRev } as any)
+
+        {
+            const rows = childCollectionRows['demo_jp_child'] || []
+            if (rows.length > 0) {
+                const entities = rows.map((row) => this.demo_jp_childDraftRepository.create({
+                    ...row,
+                    demoJpChildId: OMUtilts.generateTimestampId(),
+                    objParentId: parentId,
+                    objStatus: draft.objStatus,
+                    objState: draft.objState,
+                    objLang: draft.objLang,
+                    objRev: draft.objRev,
+                    objContentId: draft.objContentId,
+                    objCreatedBy: draft.objCreatedBy,
+                    objModifiedBy: draft.objModifiedBy,
+                    objPublishedDate: draft.objPublishedDate,
+                    objPublishedBy: draft.objPublishedBy,
+                } as any))
+                await this.demo_jp_childDraftRepository.save(entities as any)
+            }
+        }
+        await this.demo_jp_galleryDraftRepository.delete({ objParentId: parentId, objRev: draft.objRev } as any)
+
+        {
+            const rows = galleryCollectionRows['demo_jp_gallery'] || []
+            if (rows.length > 0) {
+                const entities = rows.map((row, index) => this.demo_jp_galleryDraftRepository.create({
+                    demoJpGalleryId: OMUtilts.generateTimestampId(),
+                    objParentId: parentId,
+                    objFile: String((row as any).file || (row as any).obj_file || '').trim(),
+                    objFileGen: String((row as any).file_gen || (row as any).obj_file_gen || '').trim(),
+                    objPriority: Number((row as any).priority ?? (row as any).obj_priority ?? index) || index,
+                    objLang: draft.objLang,
+                    objRev: draft.objRev,
+                } as any))
+                await this.demo_jp_galleryDraftRepository.save(entities as any)
+            }
+        }
+        await this.korea_galleryDraftRepository.delete({ objParentId: parentId, objRev: draft.objRev } as any)
+
+        {
+            const rows = galleryCollectionRows['korea_gallery'] || []
+            if (rows.length > 0) {
+                const entities = rows.map((row, index) => this.korea_galleryDraftRepository.create({
+                    koreaGalleryId: OMUtilts.generateTimestampId(),
+                    objParentId: parentId,
+                    objFile: String((row as any).file || (row as any).obj_file || '').trim(),
+                    objFileGen: String((row as any).file_gen || (row as any).obj_file_gen || '').trim(),
+                    objPriority: Number((row as any).priority ?? (row as any).obj_priority ?? index) || index,
+                    objLang: draft.objLang,
+                    objRev: draft.objRev,
+                } as any))
+                await this.korea_galleryDraftRepository.save(entities as any)
+            }
+        }
+    }
+
+    private async replacePublishedCollections(parentId: string, draft: DemoJpTestDraft, childCollectionRows: Record<string, Array<Record<string, any>>>, galleryCollectionRows: Record<string, Array<Record<string, any>>>): Promise<void> {
+        await this.demo_jp_childRepository.delete({ objParentId: parentId } as any)
+
+        {
+            const rows = childCollectionRows['demo_jp_child'] || []
+            if (rows.length > 0) {
+                const entities = rows.map((row) => this.demo_jp_childRepository.create({
+                    ...row,
+                    demoJpChildId: OMUtilts.generateTimestampId(),
+                    objParentId: parentId,
+                    objLang: draft.objLang,
+                    objContentId: draft.objContentId,
+                    objCreatedBy: draft.objCreatedBy,
+                    objPublishedDate: draft.objPublishedDate,
+                    objPublishedBy: draft.objPublishedBy,
+                } as any))
+                await this.demo_jp_childRepository.save(entities as any)
+            }
+        }
+        await this.demo_jp_galleryRepository.delete({ objParentId: parentId } as any)
+
+        {
+            const rows = galleryCollectionRows['demo_jp_gallery'] || []
+            if (rows.length > 0) {
+                const entities = rows.map((row, index) => this.demo_jp_galleryRepository.create({
+                    demoJpGalleryId: OMUtilts.generateTimestampId(),
+                    objParentId: parentId,
+                    objFile: String((row as any).file || (row as any).obj_file || '').trim(),
+                    objFileGen: String((row as any).file_gen || (row as any).obj_file_gen || '').trim(),
+                    objPriority: Number((row as any).priority ?? (row as any).obj_priority ?? index) || index,
+                } as any))
+                await this.demo_jp_galleryRepository.save(entities as any)
+            }
+        }
+        await this.korea_galleryRepository.delete({ objParentId: parentId } as any)
+
+        {
+            const rows = galleryCollectionRows['korea_gallery'] || []
+            if (rows.length > 0) {
+                const entities = rows.map((row, index) => this.korea_galleryRepository.create({
+                    koreaGalleryId: OMUtilts.generateTimestampId(),
+                    objParentId: parentId,
+                    objFile: String((row as any).file || (row as any).obj_file || '').trim(),
+                    objFileGen: String((row as any).file_gen || (row as any).obj_file_gen || '').trim(),
+                    objPriority: Number((row as any).priority ?? (row as any).obj_priority ?? index) || index,
+                } as any))
+                await this.korea_galleryRepository.save(entities as any)
+            }
+        }
+    }
+
     async create(createDto: CreateDemoJpTestDto): Promise<DemoJpTestDraft> {
         const { publish, obj_state, obj_status, obj_lang, obj_rev, obj_created_by, obj_modified_by, obj_published_by, ...rest } = createDto as any
+        const { sanitizedRest, childCollectionRows, galleryCollectionRows } = this.extractCollections(rest as Record<string, any>)
         const newId = await this.nextId()
         const contentId = newId
         const nextRev = obj_rev ?? (await this.nextRevision(contentId))
         const publishFlag = this.shouldPublish(publish, obj_state)
         const nowUtc = OMDatetime.getUtcNow()
 
-        const normalizedRest = this.normalizePayloadForSave(rest)
+        const normalizedRest = this.normalizePayloadForSave(sanitizedRest)
 
         const draft = this.draftRepository.create({
             ...normalizedRest,
@@ -381,10 +612,12 @@ export class DemoJpTestService {
         } as any) as unknown as DemoJpTestDraft
 
         const savedDraft: DemoJpTestDraft = await this.draftRepository.save(draft as DemoJpTestDraft)
+        await this.replaceDraftCollections((savedDraft as any).demoJpTestId, savedDraft, childCollectionRows, galleryCollectionRows)
 
         if (publishFlag) {
             const published = this.mainRepository.create(savedDraft as unknown as DemoJpTest)
             await this.mainRepository.save(published)
+            await this.replacePublishedCollections((savedDraft as any).demoJpTestId, savedDraft, childCollectionRows, galleryCollectionRows)
         }
 
         return savedDraft
@@ -420,6 +653,7 @@ export class DemoJpTestService {
         if (!existing) return null
 
         const { publish, obj_state, obj_lang, obj_modified_by, obj_published_by, ...rest } = updateDto as any
+        const { sanitizedRest, childCollectionRows, galleryCollectionRows, childCollectionProvided, galleryCollectionProvided } = this.extractCollections(rest as Record<string, any>)
 
         await this.draftRepository.update(
             { demoJpTestId: (existing as any).demoJpTestId, objLang: existing.objLang, objRev: existing.objRev } as any,
@@ -431,7 +665,7 @@ export class DemoJpTestService {
         const publishFlag = this.shouldPublish(publish, obj_state)
         const nowUtc = OMDatetime.getUtcNow()
 
-        const normalizedRest = this.normalizePayloadForSave(rest)
+        const normalizedRest = this.normalizePayloadForSave(sanitizedRest)
 
         const merged = this.draftRepository.create({
             ...existing,
@@ -447,9 +681,30 @@ export class DemoJpTestService {
 
         const savedDraft: DemoJpTestDraft = await this.draftRepository.save(merged as DemoJpTestDraft)
 
+        const hasChildPayload = Object.values(childCollectionProvided).some(Boolean)
+        const hasGalleryPayload = Object.values(galleryCollectionProvided).some(Boolean)
+
+        const loadedPrevious = (!hasChildPayload && !hasGalleryPayload)
+            ? await this.loadDraftCollections(String((existing as any).demoJpTestId), Number((existing as any).objRev))
+            : { childCollectionRows: {}, galleryCollectionRows: {} }
+
+        const resolvedChildCollectionRows = hasChildPayload
+            ? childCollectionRows
+            : (loadedPrevious.childCollectionRows || {})
+
+        const resolvedGalleryCollectionRows = hasGalleryPayload
+            ? galleryCollectionRows
+            : (loadedPrevious.galleryCollectionRows || {})
+
+        await this.replaceDraftCollections(String((savedDraft as any).demoJpTestId), savedDraft, resolvedChildCollectionRows, resolvedGalleryCollectionRows)
+
         if (publishFlag) {
             await this.mainRepository.save(this.mainRepository.create(savedDraft as unknown as DemoJpTest))
+            await this.replacePublishedCollections(String((savedDraft as any).demoJpTestId), savedDraft, resolvedChildCollectionRows, resolvedGalleryCollectionRows)
         } else {
+            await this.demo_jp_childRepository.delete({ objParentId: String((savedDraft as any).demoJpTestId) } as any)
+            await this.demo_jp_galleryRepository.delete({ objParentId: String((savedDraft as any).demoJpTestId) } as any)
+            await this.korea_galleryRepository.delete({ objParentId: String((savedDraft as any).demoJpTestId) } as any)
             await this.mainRepository.delete({ demoJpTestId: (savedDraft as any).demoJpTestId } as any)
         }
 
@@ -475,6 +730,9 @@ export class DemoJpTestService {
             } as any),
         )
 
+            await this.demo_jp_childRepository.delete({ objParentId: String((existing as any).demoJpTestId) } as any)
+            await this.demo_jp_galleryRepository.delete({ objParentId: String((existing as any).demoJpTestId) } as any)
+            await this.korea_galleryRepository.delete({ objParentId: String((existing as any).demoJpTestId) } as any)
         await this.mainRepository.delete({ demoJpTestId: (existing as any).demoJpTestId } as any)
     }
 
