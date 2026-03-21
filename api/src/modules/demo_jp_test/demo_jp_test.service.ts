@@ -71,10 +71,10 @@ export class DemoJpTestService {
     private readonly tableLookupMap: Record<string, TableLookupConfig> = {
         province: {
             tableName: 'province',
-            valueColumn: 'id',
-            labelColumn: 'title',
+            valueColumn: 'province_id',
+            labelColumn: 'title_tha',
             orderBy: {
-                column: 'title',
+                column: 'title_tha',
                 direction: 'ASC',
             },
         },
