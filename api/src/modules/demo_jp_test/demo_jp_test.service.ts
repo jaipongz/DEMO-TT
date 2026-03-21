@@ -941,6 +941,7 @@ export class DemoJpTestService {
                 { value: 'news', label: 'News' },
                 { value: 'article', label: 'Article' },
                 { value: 'blog', label: 'Blog' },
+                { value: 'content', label: 'Content' },
             ],
             status: [
                 { value: 'draft', label: 'Draft' },
