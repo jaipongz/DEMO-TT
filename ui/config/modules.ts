@@ -17,6 +17,11 @@ export const modules: ModuleConfig[] = [
         href: '/demo_jp',
     },
     {
+        id: 'demo_jp_test',
+        label: 'Demo JP Test',
+        href: '/demo_jp_test',
+    },
+    {
         id: 'admin',
         label: 'Admin',
         children: [

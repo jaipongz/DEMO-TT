@@ -7,6 +7,8 @@
   "passwordLifetimeDays": 90,
   "sessionTimeoutMinutes": 60,
   "maxLoginAttempts": 5,
+  "maxRevision": 10,
+  "actionLogsRetention": "6_month",
   "locale": "en",
   "timezone": "Asia/Bangkok",
   "maintenanceMode": "off",
@@ -24,7 +26,5 @@
       "value": "sssssss"
     }
   ],
-  "maxRevision": 10,
-  "actionLogsRetention": "6_month",
-  "updatedAt": "2026-03-16T10:24:58.947Z"
+  "updatedAt": "2026-03-21T10:21:40.135Z"
 }

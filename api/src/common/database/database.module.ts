@@ -29,7 +29,7 @@ import { DatabaseService } from './database.service';
             host: configService.get('DATABASE_HOST') || 'localhost',
             port: parseInt(configService.get('DATABASE_PORT') || '3306'),
             username: configService.get('DATABASE_USER') || 'root',
-            password: configService.get('DATABASE_PASSWORD') || 'password',
+            password: configService.get('DATABASE_PASSWORD') || '',
             database: configService.get('DATABASE_NAME') || 'nestjs_db',
             timezone: 'Z',
           },
