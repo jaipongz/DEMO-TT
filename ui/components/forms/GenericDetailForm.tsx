@@ -4,7 +4,7 @@ import Link from 'next/link'
 import useSWR from 'swr'
 import { api } from '../../utils/api'
 import DynamicFormBox from './DynamicFormBox'
-import { FormConfig, validateFormFields } from '../../types/formConfig'
+import { FormConfig, FormField, validateFormFields } from '../../types/formConfig'
 import { langLookup, langOptions } from '../../config/core'
 import CustomSelect from '../core/CustomSelect'
 import SaveActionBar from './SaveActionBar'
@@ -94,6 +94,46 @@ function toSnakeCase(input: string): string {
     .toLowerCase()
 }
 
+function toGalleryFieldKey(boxLabel: string): string {
+  return `__gallery_${toSnakeCase(boxLabel || 'gallery')}`
+}
+
+function resolveDetailFieldKey(field: FormField, boxLabel: string, rowIdx: number, fieldIdx: number): string {
+  if (field.field) return field.field
+
+  const base =
+    field.childConfig?.title ||
+    field.name ||
+    boxLabel ||
+    `child_${rowIdx}_${fieldIdx}`
+
+  return `__child_${toSnakeCase(base)}_${rowIdx}_${fieldIdx}`
+}
+
+function getDynamicCollectionAliasKeys(fieldName: string): string[] {
+  const aliases: string[] = []
+
+  if (fieldName.startsWith('__gallery_')) {
+    const base = toSnakeCase(fieldName.replace(/^__gallery_/, ''))
+    aliases.push(base)
+    if (base.endsWith('_list')) aliases.push(base.slice(0, -5))
+  }
+
+  if (fieldName.startsWith('__child_')) {
+    const raw = toSnakeCase(fieldName.replace(/^__child_/, ''))
+    const withoutIndex = raw.replace(/_\d+_\d+$/, '')
+    aliases.push(withoutIndex)
+
+    if (withoutIndex.endsWith('_list')) {
+      aliases.push(withoutIndex.slice(0, -5))
+    } else {
+      aliases.push(`${withoutIndex}_list`)
+    }
+  }
+
+  return Array.from(new Set(aliases.filter(Boolean)))
+}
+
 function getValueByAliases(payload: Record<string, any>, fieldName: string): any {
   const aliases = Array.from(new Set([fieldName, toCamelCase(fieldName), toSnakeCase(fieldName)]))
   for (const key of aliases) {
@@ -101,6 +141,20 @@ function getValueByAliases(payload: Record<string, any>, fieldName: string): any
       return payload[key]
     }
   }
+
+  for (const collectionAlias of getDynamicCollectionAliasKeys(fieldName)) {
+    const collectionAliases = Array.from(new Set([
+      collectionAlias,
+      toCamelCase(collectionAlias),
+      toSnakeCase(collectionAlias),
+    ]))
+    for (const key of collectionAliases) {
+      if (Object.prototype.hasOwnProperty.call(payload, key)) {
+        return payload[key]
+      }
+    }
+  }
+
   return undefined
 }
 
@@ -140,12 +194,51 @@ interface GenericDetailFormProps {
 
 type RevisionItem = {
   obj_rev?: number
+  rev?: number
   obj_lang?: string
+  lang?: string
   obj_status?: string
+  status?: string
   obj_state?: string
+  state?: string
   obj_modified_by_name?: string
+  modified_by_name?: string
+  modified_by?: number | string
   obj_modified_date?: string
+  modified_date?: string
   is_active?: boolean
+}
+
+type NormalizedRevisionItem = {
+  rev: number
+  lang: string
+  status: string
+  state: string
+  modifiedByName: string
+  modifiedDateRaw: string
+  isActive: boolean
+}
+
+function normalizeRevisionItem(item: RevisionItem): NormalizedRevisionItem {
+  const rev = Number(item?.obj_rev ?? item?.rev ?? 0)
+  const lang = String(item?.obj_lang ?? item?.lang ?? '').trim()
+  const status = String(item?.obj_status ?? item?.status ?? '').trim()
+  const state = String(item?.obj_state ?? item?.state ?? '').trim()
+  const modifiedByName = String(
+    item?.obj_modified_by_name ?? item?.modified_by_name ?? item?.modified_by ?? '-'
+  ).trim() || '-'
+  const modifiedDateRaw = String(item?.obj_modified_date ?? item?.modified_date ?? '').trim()
+  const isActive = Boolean(item?.is_active)
+
+  return {
+    rev,
+    lang,
+    status,
+    state,
+    modifiedByName,
+    modifiedDateRaw,
+    isActive,
+  }
 }
 
 export default function GenericDetailForm({
@@ -201,9 +294,14 @@ export default function GenericDetailForm({
   })
   const defaultState = 'draft'
   const masterField = String(formConfig.master_field || '').trim()
-  const availableFields = formConfig.box.flatMap((box) => {
+  const availableFields = formConfig.box.flatMap((box, boxIdx) => {
     if ('fields' in box) {
-      return box.fields.map((field) => field.field).filter((field): field is string => Boolean(field))
+      return box.fields
+        .map((field, fieldIdx) => resolveDetailFieldKey(field, box.label, boxIdx, fieldIdx))
+        .filter((field): field is string => Boolean(field))
+    }
+    if (box.type === 'gallery') {
+      return [box.field || toGalleryFieldKey(box.label)]
     }
     return [] as string[]
   })
@@ -347,14 +445,15 @@ export default function GenericDetailForm({
 
   const handleSelectRevision = async (item: RevisionItem) => {
     if (isNew || !id) return
-    const rev = Number(item?.obj_rev)
+    const normalizedItem = normalizeRevisionItem(item)
+    const rev = Number(normalizedItem.rev)
     if (!Number.isInteger(rev) || rev <= 0) return
 
     setRevisionPreviewLoading(true)
     setMessage('')
 
     try {
-      const lang = String(item?.obj_lang || getLangFromPayload(initialFormData || formData) || '').trim()
+      const lang = String(normalizedItem.lang || getLangFromPayload(initialFormData || formData) || '').trim()
       const query = lang ? `?lang=${encodeURIComponent(lang)}` : ''
       const response = await api.get(`${endpoint}/${id}/revisions/${rev}${query}`)
       const snapshotRaw = (response?.data || {}) as Record<string, any>
@@ -755,18 +854,19 @@ export default function GenericDetailForm({
 
   const revisionPayload = revisionResponse as { activeRevision?: number; items?: RevisionItem[] } | undefined
   const revisionItems = Array.isArray(revisionPayload?.items) ? revisionPayload!.items : []
-  const activeRevision = revisionPayload?.activeRevision
+  const activeRevision = Number((revisionResponse as any)?.activeRevision ?? (revisionResponse as any)?.active_revision)
 
   const groupedRevisions = revisionItems.reduce((acc, item) => {
-    const parsed = parseDateAsUtc(item?.obj_modified_date)
+    const normalizedItem = normalizeRevisionItem(item)
+    const parsed = parseDateAsUtc(normalizedItem.modifiedDateRaw)
     const monthKey = parsed
       ? parsed.toLocaleDateString(undefined, { timeZone: timezone || 'Asia/Bangkok', year: 'numeric', month: 'long' })
       : 'Unknown'
 
     if (!acc[monthKey]) acc[monthKey] = []
-    acc[monthKey].push({ item, parsed })
+    acc[monthKey].push({ item, normalizedItem, parsed })
     return acc
-  }, {} as Record<string, Array<{ item: RevisionItem; parsed: Date | null }>>)
+  }, {} as Record<string, Array<{ item: RevisionItem; normalizedItem: NormalizedRevisionItem; parsed: Date | null }>>)
 
   return (
     <div className="px-6 pb-6 pt-0">
@@ -872,10 +972,10 @@ export default function GenericDetailForm({
                 <section key={month}>
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-[color:var(--text-muted)] mb-2">{month}</h3>
                   <div className="space-y-2">
-                    {rows.map(({ item, parsed }, index) => {
-                      const previewKey = `${Number(item.obj_rev || 0)}:${String(item.obj_lang || '')}`
+                    {rows.map(({ item, normalizedItem, parsed }, index) => {
+                      const previewKey = `${Number(normalizedItem.rev || 0)}:${String(normalizedItem.lang || '')}`
                       const isPreviewed = revisionPreviewKey === previewKey
-                      const isActive = Boolean(item.is_active) || (activeRevision !== undefined && Number(item.obj_rev) === Number(activeRevision))
+                      const isActive = normalizedItem.isActive || (Number.isFinite(activeRevision) && Number(normalizedItem.rev) === Number(activeRevision))
                       const dateText = parsed
                         ? parsed.toLocaleDateString(undefined, {
                             timeZone: timezone || 'Asia/Bangkok',
@@ -895,7 +995,7 @@ export default function GenericDetailForm({
 
                       return (
                         <article
-                          key={`${month}-${item.obj_rev || index}-${item.obj_modified_date || index}`}
+                          key={`${month}-${normalizedItem.rev || index}-${normalizedItem.modifiedDateRaw || index}`}
                           onClick={() => handleSelectRevision(item)}
                           className={`rounded border px-3 py-2 ${
                             isPreviewed
@@ -907,12 +1007,12 @@ export default function GenericDetailForm({
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <p className="text-sm font-medium text-[color:var(--text)] truncate">{item.obj_modified_by_name || '-'}</p>
+                              <p className="text-sm font-medium text-[color:var(--text)] truncate">{normalizedItem.modifiedByName}</p>
                               <p className="text-xs text-[color:var(--text-muted)]">
                                 {dateText} <i className="far fa-clock" aria-hidden="true" /> {timeText}
                               </p>
                               <p className="text-[11px] mt-1 text-[color:var(--text-muted)]">
-                                Rev {item.obj_rev || '-'} • {String(item.obj_state || '-')} • {String(item.obj_status || '-')}
+                                Rev {normalizedItem.rev || '-'} • {normalizedItem.state || '-'} • {normalizedItem.status || '-'}
                               </p>
                             </div>
                             <button

@@ -435,6 +435,42 @@ export class DemoJpTestService {
         return (Number(result?.max) || 0) + 1
     }
 
+    private async getMaxRevision(): Promise<number> {
+        try {
+            const raw = await fs.readFile(this.siteSettingsPath, 'utf-8')
+            const parsed = JSON.parse(raw || '{}') as { maxRevision?: number }
+            const value = Number(parsed.maxRevision)
+            if (Number.isInteger(value) && value > 0) return value
+        } catch {
+            // fallback default
+        }
+        return 10
+    }
+
+    private async trimRevisionWindow(contentId: string): Promise<void> {
+        const maxRevision = await this.getMaxRevision()
+        const rows = await this.draftRepository.find({
+            where: { objContentId: contentId } as any,
+            order: { objRev: 'DESC', objModifiedDate: 'DESC' } as any,
+        })
+
+        if (rows.length <= maxRevision) return
+
+        const overflow = rows.slice(maxRevision)
+        if (overflow.length === 0) return
+
+        for (const row of overflow) {
+            await this.demo_jp_childDraftRepository.delete({ objParentId: (row as any).demoJpTestId, objRev: (row as any).objRev } as any)
+            await this.demo_jp_galleryDraftRepository.delete({ objParentId: (row as any).demoJpTestId, objRev: (row as any).objRev } as any)
+            await this.korea_galleryDraftRepository.delete({ objParentId: (row as any).demoJpTestId, objRev: (row as any).objRev } as any)
+            await this.draftRepository.delete({
+                demoJpTestId: (row as any).demoJpTestId,
+                objLang: (row as any).objLang,
+                objRev: (row as any).objRev,
+            } as any)
+        }
+    }
+
     private shouldPublish(publishFlag: unknown, objState?: string): boolean {
         if (typeof publishFlag === 'boolean') return publishFlag
         const normalized = String(objState || '').trim().toLowerCase()
@@ -706,6 +742,8 @@ export class DemoJpTestService {
             await this.replacePublishedCollections((savedDraft as any).demoJpTestId, savedDraft, childCollectionRows, galleryCollectionRows)
         }
 
+        await this.trimRevisionWindow(contentId)
+
         return savedDraft
     }
 
@@ -793,6 +831,8 @@ export class DemoJpTestService {
             await this.mainRepository.delete({ demoJpTestId: (savedDraft as any).demoJpTestId } as any)
         }
 
+        await this.trimRevisionWindow(contentId)
+
         return savedDraft
     }
 
@@ -819,6 +859,8 @@ export class DemoJpTestService {
             await this.demo_jp_galleryRepository.delete({ objParentId: String((existing as any).demoJpTestId) } as any)
             await this.korea_galleryRepository.delete({ objParentId: String((existing as any).demoJpTestId) } as any)
         await this.mainRepository.delete({ demoJpTestId: (existing as any).demoJpTestId } as any)
+
+        await this.trimRevisionWindow(String((existing as any).objContentId))
     }
 
     async runListAction(payload?: ListActionInput, actorId?: number): Promise<{ action: string; requested: number; success: number; failed: number; failedIds: string[] }> {
@@ -947,16 +989,17 @@ export class DemoJpTestService {
             .getMany()
 
         const items = rows.map((row) => ({
-            id: (row as any).demoJpTestId,
-            contentId: (row as any).objContentId,
-            rev: (row as any).objRev,
-            lang: (row as any).objLang,
-            state: (row as any).objState,
-            status: (row as any).objStatus,
-            modifiedDate: (row as any).objModifiedDate,
-            modifiedBy: (row as any).objModifiedBy,
-            publishedDate: (row as any).objPublishedDate,
-            publishedBy: (row as any).objPublishedBy,
+            demo_jp_test_id: (row as any).demoJpTestId,
+            obj_content_id: (row as any).objContentId,
+            obj_lang: (row as any).objLang,
+            obj_rev: (row as any).objRev,
+            obj_status: (row as any).objStatus,
+            obj_state: (row as any).objState,
+            obj_modified_by: (row as any).objModifiedBy,
+            obj_modified_by_name: '-',
+            obj_modified_date: (row as any).objModifiedDate,
+            obj_published_date: (row as any).objPublishedDate,
+            is_active: String((row as any).objStatus || '').toLowerCase() === 'active',
         }))
 
         return {
