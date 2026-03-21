@@ -6,16 +6,11 @@ export interface ModuleConfig {
 }
 
 export const modules: ModuleConfig[] = [
-    {
-        id: 'articles',
-        label: 'Articles',
-        href: '/articles',
-    },
-    {
-        id: 'home_banner',
-        label: 'Home Banner',
-        href: '/home_banner',
-    },
+    // {
+    //     id: 'articles', // Example module, you can replace it with your actual modules
+    //     label: 'Articles', // Display name for the module
+    //     href: '/articles', // URL path to navigate to when the module is clicked
+    // },
     {
         id: 'demo_jp',
         label: 'Demo JP',
