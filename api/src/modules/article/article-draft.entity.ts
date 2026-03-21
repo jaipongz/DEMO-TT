@@ -1,82 +1,53 @@
-import { Entity, Column, PrimaryColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm'
+import { Column, CreateDateColumn, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 
-@Entity('articles_draft')
+@Entity('article_draft')
 export class ArticleDraft {
-  @PrimaryColumn({ type: 'bigint', name: 'articles_id' })
-  articlesId: string
+  @PrimaryColumn({ type: 'bigint', name: 'article_id' })
+  articleId: string;
 
-  @Column('varchar', { name: 'thumbnail', length: 255 })
-  thumbnail: string
+  @Column('varchar', { name: 'title' })
+  title: string;
 
-  @Column('varchar', { name: 'thumbnail_gen', length: 10 })
-  thumbnailGen: string
+  @Column('text', { name: 'short_description', nullable: true })
+  shortDescription?: string;
 
-  @Column('varchar', { name: 'thumbnail_alt', length: 255, nullable: true })
-  thumbnailAlt?: string | null
+  @Column('varchar', { name: 'thumbnail', nullable: true })
+  thumbnail?: string;
+  @Column('varchar', { name: 'thumbnail_gen', length: 10, nullable: true })
+  thumbnailGen?: string;
+  @Column('varchar', { name: 'thumbnail_alt', nullable: true })
+  thumbnailAlt?: string;
 
-  @Column('varchar', { name: 'video', length: 255, nullable: true })
-  video?: string | null
+  @Column('varchar', { name: 'obj_status', length: 10 })
+  objStatus: string;
 
-  @Column('varchar', { name: 'video_gen', length: 10, nullable: true })
-  videoGen?: string | null
+  @Column('varchar', { name: 'obj_state', length: 10 })
+  objState: string;
 
-  @Column('varchar', { name: 'file', length: 255, nullable: true })
-  file?: string | null
+  @PrimaryColumn({ type: 'varchar', name: 'obj_lang', length: 10 })
+  objLang: string;
 
-  @Column('varchar', { name: 'file_gen', length: 10, nullable: true })
-  fileGen?: string | null
-
-  @Column('varchar', { name: 'title', length: 500 })
-  title: string
-
-  @Column('varchar', { name: 'author', length: 255 })
-  author: string
-
-  @Column('varchar', { name: 'date', length: 255 })
-  date: string
-
-  @Column('mediumtext', { name: 'content' })
-  content: string
-
-  @Column('text', { name: 'content-wysiwyg' })
-  contentWysiwyg: string
-
-  @Column('text', { name: 'content-wysiwyg_plain' })
-  contentWysiwygPlain: string
-
-  @Column('varchar', { name: 'brandColor', length: 255, nullable: true })
-  brandColor?: string | null
-
-  @Column('varchar', { name: 'obj_status', length: 10, default: 'active' })
-  objStatus: string
-
-  @Column('varchar', { name: 'obj_state', length: 10, default: 'draft' })
-  objState: string
-
-  @PrimaryColumn({ type: 'varchar', name: 'obj_lang', length: 10, default: 'en' })
-  objLang: string
-
-  @PrimaryColumn({ type: 'int', name: 'obj_rev', default: 1 })
-  objRev: number
+  @PrimaryColumn({ type: 'int', name: 'obj_rev' })
+  objRev: number;
 
   @Column('bigint', { name: 'obj_content_id' })
-  objContentId: string
+  objContentId: string;
 
   @CreateDateColumn({ name: 'obj_created_date' })
-  objCreatedDate: Date
+  objCreatedDate: Date;
 
   @Column('int', { name: 'obj_created_by' })
-  objCreatedBy: number
+  objCreatedBy: number;
 
   @UpdateDateColumn({ name: 'obj_modified_date' })
-  objModifiedDate: Date
+  objModifiedDate: Date;
 
   @Column('int', { name: 'obj_modified_by' })
-  objModifiedBy: number
+  objModifiedBy: number;
 
   @Column('datetime', { name: 'obj_published_date', nullable: true, default: () => 'NULL' })
-  objPublishedDate: Date | null
+  objPublishedDate: Date | null;
 
   @Column('int', { name: 'obj_published_by', nullable: true })
-  objPublishedBy: number | null
+  objPublishedBy: number | null;
 }
