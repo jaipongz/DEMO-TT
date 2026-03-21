@@ -275,9 +275,9 @@ export class DemoJpTestService {
             objModifiedBy: obj_modified_by ?? obj_created_by,
             objPublishedDate: publishFlag ? nowUtc : null,
             objPublishedBy: publishFlag ? obj_published_by ?? obj_created_by ?? null : null,
-        } as any)
+        } as any) as unknown as DemoJpTestDraft
 
-        const savedDraft = await this.draftRepository.save(draft)
+        const savedDraft: DemoJpTestDraft = await this.draftRepository.save(draft as DemoJpTestDraft)
 
         if (publishFlag) {
             const published = this.mainRepository.create(savedDraft as unknown as DemoJpTest)
@@ -338,9 +338,9 @@ export class DemoJpTestService {
             objModifiedBy: obj_modified_by ?? (existing as any).objModifiedBy,
             objPublishedDate: publishFlag ? nowUtc : null,
             objPublishedBy: publishFlag ? obj_published_by ?? (existing as any).objCreatedBy : null,
-        } as any)
+        } as any) as unknown as DemoJpTestDraft
 
-        const savedDraft = await this.draftRepository.save(merged)
+        const savedDraft: DemoJpTestDraft = await this.draftRepository.save(merged as DemoJpTestDraft)
 
         if (publishFlag) {
             await this.mainRepository.save(this.mainRepository.create(savedDraft as unknown as DemoJpTest))
