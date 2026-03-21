@@ -64,9 +64,39 @@ function getAliasKeys(fieldName: string): string[] {
   return Array.from(new Set(aliases))
 }
 
+function getDynamicCollectionAliasKeys(fieldName: string): string[] {
+  const aliases: string[] = []
+
+  if (fieldName.startsWith('__gallery_')) {
+    const base = toSnakeCase(fieldName.replace(/^__gallery_/, ''))
+    aliases.push(base)
+    if (base.endsWith('_list')) aliases.push(base.slice(0, -5))
+  }
+
+  if (fieldName.startsWith('__child_')) {
+    const raw = toSnakeCase(fieldName.replace(/^__child_/, ''))
+    const withoutIndex = raw.replace(/_\d+_\d+$/, '')
+    aliases.push(withoutIndex)
+
+    if (withoutIndex.endsWith('_list')) {
+      aliases.push(withoutIndex.slice(0, -5))
+    } else {
+      aliases.push(`${withoutIndex}_list`)
+    }
+  }
+
+  return Array.from(new Set(aliases.filter(Boolean)))
+}
+
 function getFormValue(data: Record<string, any>, fieldName: string): any {
   for (const key of getAliasKeys(fieldName)) {
     if (data[key] !== undefined) return data[key]
+  }
+
+  for (const key of getDynamicCollectionAliasKeys(fieldName)) {
+    for (const aliasKey of getAliasKeys(key)) {
+      if (data[aliasKey] !== undefined) return data[aliasKey]
+    }
   }
 
   if (fieldName === 'document') {
