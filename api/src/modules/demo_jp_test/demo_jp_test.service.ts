@@ -68,6 +68,35 @@ type TableLookupConfig = {
 export class DemoJpTestService {
     private readonly logger = new Logger(DemoJpTestService.name)
     private readonly siteSettingsPath = path.join(process.cwd(), 'config', 'site-settings.json')
+    private readonly tableLookupMap: Record<string, TableLookupConfig> = {
+        province: {
+            tableName: 'province',
+            valueColumn: 'id',
+            labelColumn: 'title',
+            orderBy: {
+                column: 'title',
+                direction: 'ASC',
+            },
+        },
+        article: {
+            tableName: 'article',
+            valueColumn: 'article_id',
+            labelColumn: 'title',
+            orderBy: {
+                column: 'title',
+                direction: 'ASC',
+            },
+        },
+        home_banner_tags: {
+            tableName: 'home_banner',
+            valueColumn: 'id',
+            labelColumn: 'title',
+            orderBy: {
+                column: 'title',
+                direction: 'ASC',
+            },
+        },
+    }
     private readonly listFieldMap: Record<string, keyof DemoJpTestDraft> = {
         demo_jp_test_id: 'demoJpTestId',
         title: 'title',
@@ -101,6 +130,42 @@ export class DemoJpTestService {
         @InjectRepository(DemoJpTestDraft)
         private draftRepository: Repository<DemoJpTestDraft>,
     ) {}
+
+    private resolveLang(lang?: string): string {
+        const normalized = String(lang || '').trim().toLowerCase()
+        return normalized || 'en'
+    }
+
+    private async queryTableLookup(config: TableLookupConfig, lang: string): Promise<LookupOption[]> {
+        const labelColumn = config.labelColumn
+        const valueColumn = config.valueColumn
+
+        const qb = this.draftRepository.manager
+            .createQueryBuilder()
+            .select(`${config.tableName}.${valueColumn}`, 'value')
+            .addSelect(`${config.tableName}.${labelColumn}`, 'label')
+            .from(config.tableName, config.tableName)
+
+        const orderByColumn = config.orderBy?.column || labelColumn
+        const orderByDirection = String(config.orderBy?.direction || 'ASC').toUpperCase() === 'DESC' ? 'DESC' : 'ASC'
+
+        if (config.whereSql && config.whereSql.trim() !== '') {
+            qb.where(config.whereSql)
+        }
+
+        if (config.langColumn && lang !== '') {
+            qb.andWhere(`${config.tableName}.${config.langColumn} = :lang`, { lang })
+        }
+
+        qb.orderBy(`${config.tableName}.${orderByColumn}`, orderByDirection as 'ASC' | 'DESC')
+
+        const rows = await qb.getRawMany<{ value: string | number; label: string }>()
+
+        return rows.map((row) => ({
+            value: String(row.value),
+            label: String(row.label || row.value),
+        }))
+    }
 
     private toPositiveInt(value: unknown, fallback: number): number {
         const parsed = Number(value)
@@ -444,14 +509,37 @@ export class DemoJpTestService {
 
     async getLookup(field?: string, lang?: string): Promise<LookupResponse> {
         const normalizedField = String(field || '')
-        const normalizedLang = String(lang || '').trim().toLowerCase()
+        const normalizedLang = this.resolveLang(lang)
 
         const map: Record<string, Array<{ value: string; label: string }>> = {
+            category: [
+                { value: 'news', label: 'News' },
+                { value: 'article', label: 'Article' },
+                { value: 'blog', label: 'Blog' },
+            ],
             status: [
                 { value: 'draft', label: 'Draft' },
                 { value: 'published', label: 'Published' },
                 { value: 'archived', label: 'Archived' },
             ],
+            flags: [
+                { value: 'featured', label: 'Featured' },
+                { value: 'recommended', label: 'Recommended' },
+                { value: 'popular', label: 'Popular' },
+            ],
+            is_active: [
+                { value: '1', label: 'Active' },
+                { value: '0', label: 'Inactive' },
+            ],
+        }
+
+        if (this.tableLookupMap[normalizedField]) {
+            const options = await this.queryTableLookup(this.tableLookupMap[normalizedField], normalizedLang)
+            return {
+                field: normalizedField,
+                lang: normalizedLang,
+                options,
+            }
         }
 
         return {
