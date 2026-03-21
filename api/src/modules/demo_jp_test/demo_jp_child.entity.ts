@@ -8,11 +8,27 @@ export class DemoJpChild {
   @Column('varchar', { name: 'title' })
   title: string;
 
+
+
+
+
   @Column('varchar', { name: 'file', nullable: true })
   file?: string;
 
+
+
+  @Column('varchar', { name: 'file_gen', length: 10, nullable: true })
+  fileGen?: string;
+
+
   @Column('text', { name: 'detail', nullable: true })
   detail?: string;
+
+
+
+
+  @Column('text', { name: 'detail_plain', nullable: true })
+  detailPlain?: string;
 
   @Column('varchar', { name: 'obj_lang', length: 10 })
   objLang: string;

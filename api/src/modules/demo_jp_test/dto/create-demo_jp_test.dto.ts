@@ -11,88 +11,181 @@ export class CreateDemoJpTestDto {
   @IsString()
   title: string;
 
+
+
+
+
   @ApiProperty({ required: false, example: 'email' })
   @IsString()
   @IsOptional()
   email?: string;
+
+
+
+
 
   @ApiProperty({ required: false, example: 'age' })
   @IsInt()
   @IsOptional()
   age?: number;
 
+
+
+
+
   @ApiProperty({ required: false, example: 'brand_color' })
   @IsString()
   @IsOptional()
   brand_color?: string;
+
+
+
+
 
   @ApiProperty({ required: false, example: 'published_date' })
   @IsString()
   @IsOptional()
   published_date?: string;
 
+
+
+
+
   @ApiProperty({ required: false, example: 'published_at' })
   @IsString()
   @IsOptional()
   published_at?: string;
 
+
+
+
+
   @ApiProperty({ required: true, example: 'category' })
   @IsString()
   category: string;
 
+
+
+
+
   @ApiProperty({ required: true, example: 'province' })
   @IsString()
   province: string;
+
+
+
+
 
   @ApiProperty({ required: false, example: 'article' })
   @IsString()
   @IsOptional()
   article?: string;
 
+
+
+
+
   @ApiProperty({ required: false, example: 'home_banner_tags' })
   @IsArray()
   @IsOptional()
   home_banner_tags?: string[];
+
+
+
+
 
   @ApiProperty({ required: false, example: 'status' })
   @IsString()
   @IsOptional()
   status?: string;
 
+
+
+
+
   @ApiProperty({ required: false, example: 'flags' })
   @IsArray()
   @IsOptional()
   flags?: string[];
+
+
+
+
 
   @ApiProperty({ required: false, example: 'is_active' })
   @IsBoolean()
   @IsOptional()
   is_active?: boolean;
 
+
+
+
+
   @ApiProperty({ required: false, example: 'summary' })
   @IsString()
   @IsOptional()
   summary?: string;
+
+
+
+
 
   @ApiProperty({ required: false, example: 'content' })
   @IsString()
   @IsOptional()
   content?: string;
 
+
+
+
+  @ApiProperty({ required: false, example: 'content_plain' })
+  @IsString()
+  @IsOptional()
+  content_plain?: string;
+
   @ApiProperty({ required: false, example: 'thumbnail' })
   @IsString()
   @IsOptional()
   thumbnail?: string;
+
+  @ApiProperty({ required: false, example: 'thumbnail_gen' })
+  @IsString()
+  @IsOptional()
+  thumbnail_gen?: string;
+
+  @ApiProperty({ required: false, example: 'thumbnail_alt' })
+  @IsString()
+  @IsOptional()
+  thumbnail_alt?: string;
+
+
+
 
   @ApiProperty({ required: false, example: 'intro_video' })
   @IsString()
   @IsOptional()
   intro_video?: string;
 
+
+  @ApiProperty({ required: false, example: 'intro_video_gen' })
+  @IsString()
+  @IsOptional()
+  intro_video_gen?: string;
+
+
+
   @ApiProperty({ required: false, example: 'attachment' })
   @IsString()
   @IsOptional()
   attachment?: string;
+
+
+
+  @ApiProperty({ required: false, example: 'attachment_gen' })
+  @IsString()
+  @IsOptional()
+  attachment_gen?: string;
+
 
   @ApiProperty({ example: 'active', required: false, default: 'active' })
   @IsString()

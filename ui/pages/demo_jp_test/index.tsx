@@ -9,7 +9,11 @@ import { api } from '../../utils/api'
 import { ContextMenuItem } from '../../components/core/ContextMenu'
 
 const module_name = 'demo_jp_test'
-const getRecordId = (row: any) => row?.demo_jp_test_id || row?.obj_content_id
+const getRecordId = (row: any) =>
+  row?.demoJpTestId ||
+  row?.demo_jp_test_id ||
+  row?.objContentId ||
+  row?.obj_content_id
 
 export default function DemoJpTestListPage() {
   const router = useRouter()

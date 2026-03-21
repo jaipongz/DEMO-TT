@@ -20,7 +20,7 @@ export const demoJpTestListConfig: ListConfig = {
   scroll: true,
   limit: 15,
   createHref: '/demo_jp_test/new?mode=add',
-  rowKey: 'demo_jp_test_id',
+  rowKey: 'demoJpTestId',
   columns: [
     { field: 'thumbnail', name: 'Thumbnail', type: 'image', width: 120, sort: false },
     { field: 'title', name: 'Title', type: 'text', width: 120, sort: true },

@@ -337,6 +337,19 @@ export class DemoJpTestService {
             const raw = String(normalized['is_active']).trim().toLowerCase()
             normalized['is_active'] = raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on' ? 1 : 0
         }
+        if (normalized['content_plain'] === undefined || normalized['content_plain'] === null) {
+            const plainSource = String(normalized['content'] ?? '')
+            normalized['content_plain'] = plainSource.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+        }
+        if (normalized['thumbnail_gen'] === undefined || normalized['thumbnail_gen'] === null) {
+            normalized['thumbnail_gen'] = normalized['thumbnail'] ? 'N' : ''
+        }
+        if (normalized['intro_video_gen'] === undefined || normalized['intro_video_gen'] === null) {
+            normalized['intro_video_gen'] = normalized['intro_video'] ? 'N' : ''
+        }
+        if (normalized['attachment_gen'] === undefined || normalized['attachment_gen'] === null) {
+            normalized['attachment_gen'] = normalized['attachment'] ? 'N' : ''
+        }
 
         return normalized
     }
