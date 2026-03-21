@@ -318,6 +318,29 @@ export class DemoJpTestService {
         return normalized === 'publish' || normalized === 'published'
     }
 
+    private normalizePayloadForSave(payload: Record<string, any>): Record<string, any> {
+        const normalized = { ...payload }
+
+        if (Array.isArray(normalized['home_banner_tags'])) {
+            normalized['home_banner_tags'] = JSON.stringify(
+                normalized['home_banner_tags'].map((item: unknown) => String(item ?? '').trim()).filter(Boolean),
+            )
+        }
+        if (Array.isArray(normalized['flags'])) {
+            normalized['flags'] = JSON.stringify(
+                normalized['flags'].map((item: unknown) => String(item ?? '').trim()).filter(Boolean),
+            )
+        }
+        if (typeof normalized['is_active'] === 'boolean') {
+            normalized['is_active'] = normalized['is_active'] ? 1 : 0
+        } else if (normalized['is_active'] !== undefined && normalized['is_active'] !== null) {
+            const raw = String(normalized['is_active']).trim().toLowerCase()
+            normalized['is_active'] = raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on' ? 1 : 0
+        }
+
+        return normalized
+    }
+
     async create(createDto: CreateDemoJpTestDto): Promise<DemoJpTestDraft> {
         const { publish, obj_state, obj_status, obj_lang, obj_rev, obj_created_by, obj_modified_by, obj_published_by, ...rest } = createDto as any
         const newId = await this.nextId()
@@ -326,8 +349,10 @@ export class DemoJpTestService {
         const publishFlag = this.shouldPublish(publish, obj_state)
         const nowUtc = OMDatetime.getUtcNow()
 
+        const normalizedRest = this.normalizePayloadForSave(rest)
+
         const draft = this.draftRepository.create({
-            ...rest,
+            ...normalizedRest,
             demoJpTestId: newId,
             objStatus: obj_status || 'active',
             objState: publishFlag ? 'published' : obj_state || 'draft',
@@ -393,9 +418,11 @@ export class DemoJpTestService {
         const publishFlag = this.shouldPublish(publish, obj_state)
         const nowUtc = OMDatetime.getUtcNow()
 
+        const normalizedRest = this.normalizePayloadForSave(rest)
+
         const merged = this.draftRepository.create({
             ...existing,
-            ...rest,
+            ...normalizedRest,
             objState: publishFlag ? 'published' : obj_state || (existing as any).objState || 'draft',
             objLang: obj_lang || (existing as any).objLang || 'en',
             objRev: nextRev,
