@@ -1,157 +1,159 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsInt, IsOptional, IsString } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger'
+import { IsArray, IsBoolean, IsInt, IsOptional, IsString } from 'class-validator'
 
 export class CreateDemoJpDto {
   @ApiProperty({ example: '1001', required: false })
   @IsString()
   @IsOptional()
-  demo_jp_id?: string;
+  demo_jp_id?: string
 
-  @ApiProperty({ required: true, example: 'title' })
+  @ApiProperty({ example: 'Demo JP Master Template' })
   @IsString()
-  title: string;
+  title: string
 
-  @ApiProperty({ required: false, example: 'email' })
-  @IsString()
-  @IsOptional()
-  email?: string;
-
-  @ApiProperty({ required: false, example: 'age' })
-  @IsInt()
-  @IsOptional()
-  age?: number;
-
-  @ApiProperty({ required: false, example: 'brand_color' })
+  @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
-  brand_color?: string;
+  email?: string
 
-  @ApiProperty({ required: false, example: 'published_date' })
+  @ApiProperty({ required: false })
+  @IsOptional()
+  age?: number
+
+  @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
-  published_date?: string;
+  brand_color?: string
 
-  @ApiProperty({ required: false, example: 'published_at' })
+  @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
-  published_at?: string;
+  category?: string
 
-  @ApiProperty({ required: true, example: 'category' })
-  @IsString()
-  category: string;
-
-  @ApiProperty({ required: true, example: 'province' })
-  @IsString()
-  province: string;
-
-  @ApiProperty({ required: false, example: 'article' })
+  @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
-  article?: string;
+  status?: string
 
-  @ApiProperty({ required: false, example: 'home_banner_tags' })
+  @ApiProperty({ required: false, type: 'array' })
   @IsArray()
   @IsOptional()
-  home_banner_tags?: string[];
+  flags?: string[]
 
-  @ApiProperty({ required: false, example: 'status' })
-  @IsString()
-  @IsOptional()
-  status?: string;
-
-  @ApiProperty({ required: false, example: 'flags' })
-  @IsArray()
-  @IsOptional()
-  flags?: string[];
-
-  @ApiProperty({ required: false, example: 'is_active' })
+  @ApiProperty({ required: false })
   @IsBoolean()
   @IsOptional()
-  is_active?: boolean;
+  is_active?: boolean
 
-  @ApiProperty({ required: false, example: 'summary' })
+  @ApiProperty({ required: false })
+  @IsOptional()
+  published_date?: string
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  published_at?: string
+
+  @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
-  summary?: string;
+  summary?: string
 
-  @ApiProperty({ required: false, example: 'content' })
+  @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
-  content?: string;
+  content?: string
 
-  @ApiProperty({ required: false, example: 'thumbnail' })
+  @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
-  thumbnail?: string;
+  thumbnail?: string
 
-  @ApiProperty({ required: false, example: 'intro_video' })
+  @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
-  intro_video?: string;
+  thumbnail_gen?: string
 
-  @ApiProperty({ required: false, example: 'attachment' })
+  @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
-  attachment?: string;
+  thumbnail_alt?: string
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  intro_video?: string
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  intro_video_gen?: string
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  attachment?: string
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  attachment_gen?: string
 
   @ApiProperty({ example: 'active', required: false, default: 'active' })
   @IsString()
   @IsOptional()
-  obj_status?: string;
+  obj_status?: string
 
   @ApiProperty({ example: 'draft', required: false, default: 'draft' })
   @IsString()
   @IsOptional()
-  obj_state?: string;
+  obj_state?: string
 
   @ApiProperty({ example: 'en', required: false, default: 'en' })
   @IsString()
   @IsOptional()
-  obj_lang?: string;
+  obj_lang?: string
 
   @ApiProperty({ example: 1, required: false })
   @IsInt()
   @IsOptional()
-  obj_rev?: number;
+  obj_rev?: number
 
   @ApiProperty({ example: 1001, required: false })
   @IsString()
   @IsOptional()
-  obj_content_id?: string;
+  obj_content_id?: string
 
   @ApiProperty({ example: 10 })
   @IsInt()
-  obj_created_by: number;
+  obj_created_by: number
 
   @ApiProperty({ example: 11, required: false })
   @IsInt()
   @IsOptional()
-  obj_modified_by?: number;
+  obj_modified_by?: number
 
   @ApiProperty({ example: 12, required: false })
   @IsInt()
   @IsOptional()
-  obj_published_by?: number;
+  obj_published_by?: number
 
   @ApiProperty({ example: true, required: false })
   @IsBoolean()
   @IsOptional()
-  publish?: boolean;
+  publish?: boolean
 
   @ApiProperty({ required: false, type: 'array' })
   @IsArray()
   @IsOptional()
-  __child_demo_jp_child?: Record<string, any>[];
-
-
-  @ApiProperty({ required: false, type: 'array' })
-  @IsArray()
-  @IsOptional()
-  __gallery_demo_jp_gallery?: Record<string, any>[];
+  __child_demo_jp_child_list_0_0?: Record<string, any>[]
 
   @ApiProperty({ required: false, type: 'array' })
   @IsArray()
   @IsOptional()
-  __gallery_korea_gallery?: Record<string, any>[];
+  __gallery_demo_jp_gallery?: Record<string, any>[]
 
+  @ApiProperty({ required: false, type: 'array' })
+  @IsArray()
+  @IsOptional()
+  __gallery_korea_gallery?: Record<string, any>[]
 }

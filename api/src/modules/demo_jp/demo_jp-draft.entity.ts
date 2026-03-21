@@ -1,94 +1,109 @@
-import { Column, CreateDateColumn, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm'
 
 @Entity('demo_jp_draft')
 export class DemoJpDraft {
   @PrimaryColumn({ type: 'bigint', name: 'demo_jp_id' })
-  demoJpId: string;
+  demoJpId: string
 
-  @Column('varchar', { name: 'title' })
-  title: string;
+  @Column('varchar', { name: 'title', length: 255 })
+  title: string
 
-  @Column('varchar', { name: 'email', nullable: true })
-  email?: string;
+  @Column('varchar', { name: 'email', length: 255, nullable: true })
+  email?: string | null
 
   @Column('int', { name: 'age', nullable: true })
-  age?: number;
+  age?: number | null
 
-  @Column('varchar', { name: 'brand_color', nullable: true })
-  brandColor?: string;
+  @Column('varchar', { name: 'brand_color', length: 20, nullable: true })
+  brandColor?: string | null
+
+  @Column('varchar', { name: 'category', length: 50, nullable: true })
+  category?: string | null
+
+  @Column('varchar', { name: 'province', length: 255, nullable: true })
+  province?: string | null
+
+  @Column('varchar', { name: 'article', length: 255, nullable: true })
+  article?: string | null
+
+  @Column('mediumtext', { name: 'home_banner_tags', nullable: true })
+  homeBannerTags?: string | null
+
+  @Column('varchar', { name: 'status', length: 50, nullable: true })
+  status?: string | null
+
+  @Column('text', { name: 'flags', nullable: true })
+  flagsJson?: string | null
+
+  @Column('tinyint', { name: 'is_active', default: 0 })
+  isActive: number
 
   @Column('date', { name: 'published_date', nullable: true })
-  publishedDate?: string;
+  publishedDate?: string | null
 
   @Column('datetime', { name: 'published_at', nullable: true })
-  publishedAt?: string;
-
-  @Column('varchar', { name: 'category' })
-  category: string;
-
-  @Column('varchar', { name: 'province' })
-  province: string;
-
-  @Column('varchar', { name: 'article', nullable: true })
-  article?: string;
-
-  @Column('varchar', { name: 'home_banner_tags', nullable: true })
-  homeBannerTags?: string;
-
-  @Column('varchar', { name: 'status', nullable: true })
-  status?: string;
-
-  @Column('varchar', { name: 'flags', nullable: true })
-  flags?: string;
-
-  @Column('tinyint', { name: 'is_active', nullable: true })
-  isActive?: number;
+  publishedAt?: Date | null
 
   @Column('text', { name: 'summary', nullable: true })
-  summary?: string;
+  summary?: string | null
 
   @Column('text', { name: 'content', nullable: true })
-  content?: string;
+  contentHtml?: string | null
 
-  @Column('varchar', { name: 'thumbnail', nullable: true })
-  thumbnail?: string;
+  @Column('text', { name: 'content_plain', nullable: true })
+  contentPlain?: string | null
 
-  @Column('varchar', { name: 'intro_video', nullable: true })
-  introVideo?: string;
+  @Column('varchar', { name: 'thumbnail', length: 255, nullable: true })
+  thumbnail?: string | null
 
-  @Column('varchar', { name: 'attachment', nullable: true })
-  attachment?: string;
+  @Column('varchar', { name: 'thumbnail_gen', length: 10, nullable: true })
+  thumbnailGen?: string | null
 
-  @Column('varchar', { name: 'obj_status', length: 10 })
-  objStatus: string;
+  @Column('varchar', { name: 'thumbnail_alt', length: 255, nullable: true })
+  thumbnailAlt?: string | null
 
-  @Column('varchar', { name: 'obj_state', length: 10 })
-  objState: string;
+  @Column('varchar', { name: 'intro_video', length: 255, nullable: true })
+  introVideo?: string | null
 
-  @PrimaryColumn({ type: 'varchar', name: 'obj_lang', length: 10 })
-  objLang: string;
+  @Column('varchar', { name: 'intro_video_gen', length: 10, nullable: true })
+  introVideoGen?: string | null
 
-  @PrimaryColumn({ type: 'int', name: 'obj_rev' })
-  objRev: number;
+  @Column('varchar', { name: 'attachment', length: 255, nullable: true })
+  attachment?: string | null
+
+  @Column('varchar', { name: 'attachment_gen', length: 10, nullable: true })
+  attachmentGen?: string | null
+
+  @Column('varchar', { name: 'obj_status', length: 10, default: 'active' })
+  objStatus: string
+
+  @Column('varchar', { name: 'obj_state', length: 10, default: 'draft' })
+  objState: string
+
+  @PrimaryColumn({ type: 'varchar', name: 'obj_lang', length: 10, default: 'en' })
+  objLang: string
+
+  @PrimaryColumn({ type: 'int', name: 'obj_rev', default: 1 })
+  objRev: number
 
   @Column('bigint', { name: 'obj_content_id' })
-  objContentId: string;
+  objContentId: string  
 
   @CreateDateColumn({ name: 'obj_created_date' })
-  objCreatedDate: Date;
+  objCreatedDate: Date
 
   @Column('int', { name: 'obj_created_by' })
-  objCreatedBy: number;
+  objCreatedBy: number
 
   @UpdateDateColumn({ name: 'obj_modified_date' })
-  objModifiedDate: Date;
+  objModifiedDate: Date
 
   @Column('int', { name: 'obj_modified_by' })
-  objModifiedBy: number;
+  objModifiedBy: number
 
   @Column('datetime', { name: 'obj_published_date', nullable: true, default: () => 'NULL' })
-  objPublishedDate: Date | null;
+  objPublishedDate: Date | null
 
   @Column('int', { name: 'obj_published_by', nullable: true })
-  objPublishedBy: number | null;
+  objPublishedBy: number | null
 }
