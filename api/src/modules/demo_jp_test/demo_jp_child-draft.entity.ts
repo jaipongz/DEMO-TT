@@ -20,6 +20,9 @@ export class DemoJpChildDraft {
   @Column('text', { name: 'detail_plain', nullable: true })
   detailPlain?: string;
 
+  @Column('bigint', { name: 'obj_parent_id' })
+  objParentId: string;
+
   @Column('varchar', { name: 'obj_status', length: 10 })
   objStatus: string;
 

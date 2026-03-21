@@ -237,6 +237,10 @@ export class DemoJpTestService {
         return []
     }
 
+    private normalizeKey(input: string): string {
+        return String(input || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+    }
+
     private extractCollections(payload: Record<string, any>): {
         sanitizedRest: Record<string, any>
         childCollectionRows: Record<string, Array<Record<string, any>>>
@@ -245,20 +249,44 @@ export class DemoJpTestService {
         galleryCollectionProvided: Record<string, boolean>
     } {
         const sanitizedRest = { ...payload }
-        const childCollectionRows: Record<string, Array<Record<string, any>>> = {}
-        const galleryCollectionRows: Record<string, Array<Record<string, any>>> = {}
-        const childCollectionProvided: Record<string, boolean> = {}
-        const galleryCollectionProvided: Record<string, boolean> = {}
+        const childCollectionRows: Record<string, Array<Record<string, any>>> = {
+            'demo_jp_child': [],
+        }
+        const galleryCollectionRows: Record<string, Array<Record<string, any>>> = {
+            'demo_jp_gallery': [],
+            'korea_gallery': [],
+        }
+        const childCollectionProvided: Record<string, boolean> = {
+            'demo_jp_child': false,
+        }
+        const galleryCollectionProvided: Record<string, boolean> = {
+            'demo_jp_gallery': false,
+            'korea_gallery': false,
+        }
 
-        childCollectionProvided['demo_jp_child'] = Object.prototype.hasOwnProperty.call(sanitizedRest, '__child_demo_jp_child')
-        childCollectionRows['demo_jp_child'] = this.toObjectArray(sanitizedRest['__child_demo_jp_child'])
-        delete sanitizedRest['__child_demo_jp_child']
-        galleryCollectionProvided['demo_jp_gallery'] = Object.prototype.hasOwnProperty.call(sanitizedRest, '__gallery_demo_jp_gallery')
-        galleryCollectionRows['demo_jp_gallery'] = this.toObjectArray(sanitizedRest['__gallery_demo_jp_gallery'])
-        delete sanitizedRest['__gallery_demo_jp_gallery']
-        galleryCollectionProvided['korea_gallery'] = Object.prototype.hasOwnProperty.call(sanitizedRest, '__gallery_korea_gallery')
-        galleryCollectionRows['korea_gallery'] = this.toObjectArray(sanitizedRest['__gallery_korea_gallery'])
-        delete sanitizedRest['__gallery_korea_gallery']
+        Object.entries(sanitizedRest).forEach(([rawKey, rawValue]) => {
+            const normalizedRawKey = this.normalizeKey(rawKey)
+
+            if (normalizedRawKey.startsWith('__child_')) {
+            const suffix = this.normalizeKey(rawKey.replace(/^__child_/i, ''))
+            if (suffix === this.normalizeKey('demo_jp_child') || suffix.startsWith(`${this.normalizeKey('demo_jp_child')}_list`)) {
+                childCollectionRows['demo_jp_child'] = this.toObjectArray(rawValue)
+                childCollectionProvided['demo_jp_child'] = true
+            }
+            }
+
+            if (normalizedRawKey.startsWith('__gallery_')) {
+            const suffix = this.normalizeKey(rawKey.replace(/^__gallery_/i, ''))
+            if (suffix === this.normalizeKey('demo_jp_gallery')) {
+                galleryCollectionRows['demo_jp_gallery'] = this.toObjectArray(rawValue)
+                galleryCollectionProvided['demo_jp_gallery'] = true
+            }
+            if (suffix === this.normalizeKey('korea_gallery')) {
+                galleryCollectionRows['korea_gallery'] = this.toObjectArray(rawValue)
+                galleryCollectionProvided['korea_gallery'] = true
+            }
+            }
+        })
 
         Object.keys(sanitizedRest).forEach((key) => {
             if (key.startsWith('__child_') || key.startsWith('__gallery_')) {
