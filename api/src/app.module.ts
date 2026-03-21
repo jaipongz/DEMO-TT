@@ -11,6 +11,7 @@ import { WcmRoleModule } from './modules/wcm-role/wcm-role.module';
 import { WcmPermissionModule } from './modules/wcm-permission/wcm-permission.module';
 import { HomeBannerModule } from './modules/home_banner/home_banner.module';
 import { DemoJpModule } from './modules/demo_jp/demo_jp.module';
+import { DemoJpTestModule } from './modules/demo_jp_test/demo_jp_test.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { WcmSiteSettingModule } from './modules/wcm-site-setting/wcm-site-setting.module';
@@ -37,6 +38,7 @@ import { PrototypeModule } from './modules/prototype/prototype.module';
     DemoJpModule,
     WcmSiteSettingModule,
     PrototypeModule,
+      DemoJpTestModule,
   ],
   controllers: [AppController],
   providers: [AppService],
