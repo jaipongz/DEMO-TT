@@ -241,6 +241,26 @@ export class DemoJpTestService {
         return String(input || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
     }
 
+    private toCamelCaseKey(input: string): string {
+        return String(input || '')
+            .replace(/[-_]+([a-zA-Z0-9])/g, (_, char: string) => String(char).toUpperCase())
+            .replace(/^([A-Z])/, (char: string) => char.toLowerCase())
+    }
+
+    private mapPayloadToEntityFields(payload: Record<string, any>): Record<string, any> {
+        const mapped: Record<string, any> = { ...payload }
+
+        Object.entries(payload || {}).forEach(([key, value]) => {
+            const camelKey = this.toCamelCaseKey(key)
+            if (!camelKey) return
+            if (mapped[camelKey] === undefined) {
+                mapped[camelKey] = value
+            }
+        })
+
+        return mapped
+    }
+
     private extractCollections(payload: Record<string, any>): {
         sanitizedRest: Record<string, any>
         childCollectionRows: Record<string, Array<Record<string, any>>>
@@ -603,7 +623,7 @@ export class DemoJpTestService {
             const rows = childCollectionRows['demo_jp_child'] || []
             if (rows.length > 0) {
                 const entities = rows.map((row) => this.demo_jp_childDraftRepository.create({
-                    ...row,
+                    ...this.mapPayloadToEntityFields(row),
                     demoJpChildId: OMUtilts.generateTimestampId(),
                     objParentId: parentId,
                     objStatus: draft.objStatus,
@@ -662,7 +682,7 @@ export class DemoJpTestService {
             const rows = childCollectionRows['demo_jp_child'] || []
             if (rows.length > 0) {
                 const entities = rows.map((row) => this.demo_jp_childRepository.create({
-                    ...row,
+                    ...this.mapPayloadToEntityFields(row),
                     demoJpChildId: OMUtilts.generateTimestampId(),
                     objParentId: parentId,
                     objLang: draft.objLang,
@@ -715,7 +735,7 @@ export class DemoJpTestService {
         const publishFlag = this.shouldPublish(publish, obj_state)
         const nowUtc = OMDatetime.getUtcNow()
 
-        const normalizedRest = this.normalizePayloadForSave(sanitizedRest)
+        const normalizedRest = this.normalizePayloadForSave(this.mapPayloadToEntityFields(sanitizedRest))
 
         const draft = this.draftRepository.create({
             ...normalizedRest,
@@ -788,7 +808,7 @@ export class DemoJpTestService {
         const publishFlag = this.shouldPublish(publish, obj_state)
         const nowUtc = OMDatetime.getUtcNow()
 
-        const normalizedRest = this.normalizePayloadForSave(sanitizedRest)
+        const normalizedRest = this.normalizePayloadForSave(this.mapPayloadToEntityFields(sanitizedRest))
 
         const merged = this.draftRepository.create({
             ...existing,
