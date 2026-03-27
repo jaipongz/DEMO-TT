@@ -415,12 +415,13 @@ export class ArticleService {
         return { childCollectionRows, galleryCollectionRows }
     }
 
-    private attachCollectionsToDraft(
+    private async attachCollectionsToDraft(
         draft: ArticleDraft,
         childCollectionRows: Record<string, Array<Record<string, any>>>,
         galleryCollectionRows: Record<string, Array<Record<string, any>>>,
-    ): ArticleDraft & Record<string, any> {
-        const hydrated: Record<string, any> = { ...draft }
+    ): Promise<ArticleDraft & Record<string, any>> {
+        const modifierName = await this.resolveUserDisplayName(draft.objModifiedBy)
+        const hydrated: Record<string, any> = { ...draft,obj_modified_by_name: modifierName }
 
 
         return hydrated as ArticleDraft & Record<string, any>
@@ -503,6 +504,8 @@ export class ArticleService {
             String((row as any).articleId),
             Number((row as any).objRev),
         )
+        const modifierName = await this.resolveUserDisplayName((row as any).objModifiedBy)
+
         return this.attachCollectionsToDraft(row, childCollectionRows, galleryCollectionRows)
     }
 
@@ -605,6 +608,42 @@ export class ArticleService {
         let success = 0
         const failedIds: string[] = []
 
+        if (action === 'setstatus') {
+            const allowedStates = new Set(['published', 'unpublish', 'draft'])
+            const nextState = String(payload?.state || '').trim().toLowerCase()
+            if (!allowedStates.has(nextState)) {
+                return { action, requested: ids.length, success: 0, failed: ids.length, failedIds: ids }
+            }
+
+            for (const id of ids) {
+                try {
+                const publish = nextState === 'published'
+                const result = await this.update(id, {
+                    obj_state: nextState,
+                    publish,
+                    obj_modified_by: actorId,
+                    obj_published_by: publish ? actorId : undefined,
+                } as UpdateArticleDto)
+
+                if (!result) {
+                    failedIds.push(id)
+                    continue
+                }
+                success += 1
+                } catch {
+                failedIds.push(id)
+                }
+            }
+
+            return {
+                action,
+                requested: ids.length,
+                success,
+                failed: failedIds.length,
+                failedIds,
+            }
+        }
+
         if (action === 'delete') {
             for (const id of ids) {
                 try {
@@ -698,19 +737,19 @@ export class ArticleService {
             .addOrderBy('d.objModifiedDate', 'DESC')
             .getMany()
 
-        const items = rows.map((row) => ({
-            article_id: (row as any).articleId,
+        const items = await Promise.all(rows.map(async (row) => ({
+            services_id: (row as any).servicesId,
             obj_content_id: (row as any).objContentId,
             obj_lang: (row as any).objLang,
             obj_rev: (row as any).objRev,
             obj_status: (row as any).objStatus,
             obj_state: (row as any).objState,
             obj_modified_by: (row as any).objModifiedBy,
-            obj_modified_by_name: '-',
+            obj_modified_by_name: await this.resolveUserDisplayName((row as any).objModifiedBy),
             obj_modified_date: (row as any).objModifiedDate,
             obj_published_date: (row as any).objPublishedDate,
             is_active: String((row as any).objStatus || '').toLowerCase() === 'active',
-        }))
+        })))
 
         return {
             activeRevision: current ? Number((current as any).objRev || 0) : null,
@@ -749,4 +788,26 @@ export class ArticleService {
 
         return this.attachCollectionsToDraft(row, childCollectionRows, galleryCollectionRows)
     }
+
+    private async resolveUserDisplayName(userId?: number | null): Promise<string> {
+        const id = Number(userId)
+        if (!Number.isInteger(id) || id <= 0) return '-'
+
+        const row = await this.draftRepository.manager
+        .createQueryBuilder()
+        .select('u.firstname', 'firstname')
+        .addSelect('u.lastname', 'lastname')
+        .addSelect('u.name', 'name')
+        .from('wcm_users', 'u')
+        .where('u.id = :id', { id })
+        .getRawOne<{ firstname?: string; lastname?: string; name?: string }>()
+
+        const first = String(row?.firstname || '').trim()
+        const last = String(row?.lastname || '').trim()
+        if (first || last) return `${first} ${last}`.trim()
+
+        const fallback = String(row?.name || '').trim()
+        return fallback || '-'
+    }
+
 }
