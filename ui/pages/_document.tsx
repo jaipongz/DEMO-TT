@@ -48,6 +48,7 @@ export default class MyDocument extends Document {
         <Head>
           <script dangerouslySetInnerHTML={{ __html: setThemeScript }} />
           <script dangerouslySetInnerHTML={{ __html: setSiteSettingsScript }} />
+          <link rel="stylesheet" href="/flag-icons.css" />
         </Head>
         <body>
           <Main />

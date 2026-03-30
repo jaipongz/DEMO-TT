@@ -7,6 +7,7 @@ import api from '../../utils/api'
 import type { SiteSettings } from '../../types/siteSettings'
 import { getTimezoneOffsetLabel, getTimezoneSelectOptions } from '../../utils/timezone'
 import { normalizeSiteSettings } from '../../utils/siteSettings'
+import { displayLocaleOptions } from '../../config/core'
 
 export default function SiteSettingPage() {
   const rowIdRef = useRef(0)
@@ -50,7 +51,7 @@ export default function SiteSettingPage() {
   const [maxLoginAttempts, setMaxLoginAttempts] = useState(5)
   const [maxRevision, setMaxRevision] = useState(5)
   const [actionLogsRetention, setActionLogsRetention] = useState<'1_month' | '3_month' | '6_month' | '9_month' | '12_month' | 'never'>('6_month')
-  const [locale, setLocale] = useState('en')
+  const [locale, setLocale] = useState(displayLocaleOptions[0].value)
   const [timezone, setTimezone] = useState('Asia/Bangkok')
   const [maintenanceMode, setMaintenanceMode] = useState('off')
   const [faviconUrl, setFaviconUrl] = useState('')
@@ -86,7 +87,7 @@ export default function SiteSettingPage() {
         setMaxLoginAttempts(toNumberValue(data.maxLoginAttempts, 5))
         setMaxRevision(toNumberValue(data.maxRevision, 5))
         setActionLogsRetention((toStringValue(data.actionLogsRetention, '6_month') as SiteSettings['actionLogsRetention']) || '6_month')
-        setLocale(toStringValue(data.locale, 'en'))
+        setLocale(toStringValue(data.locale, displayLocaleOptions[0].value))
         setTimezone(toStringValue(data.timezone, 'Asia/Bangkok'))
         setMaintenanceMode(toStringValue(data.maintenanceMode, 'off'))
         setFaviconUrl(toStringValue(data.faviconUrl, ''))
@@ -301,10 +302,7 @@ export default function SiteSettingPage() {
             <CustomSelect
               value={locale}
               onChange={setLocale}
-              options={[
-                { value: 'en', label: 'English' },
-                { value: 'th', label: 'Thai' },
-              ]}
+              options={displayLocaleOptions}
               placeholder="Select locale"
             />
           </div>

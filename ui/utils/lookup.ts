@@ -1,5 +1,6 @@
 import { api } from './api'
 import type { LookupSource } from '../types/formConfig'
+import { langOptions } from '../config/core'
 
 export interface LookupOption {
   value: string | boolean
@@ -10,14 +11,14 @@ const lookupCache = new Map<string, LookupOption[]>()
 const inFlightRequests = new Map<string, Promise<LookupOption[]>>()
 
 function getClientLang(): string {
-  if (typeof window === 'undefined') return 'en'
+  if (typeof window === 'undefined') return langOptions[0].value
   try {
     const raw = localStorage.getItem('site-settings')
-    if (!raw) return 'en'
+    if (!raw) return langOptions[0].value
     const parsed = JSON.parse(raw) as Record<string, any>
-    return String(parsed.obj_lang || 'en')
+    return String(parsed.obj_lang || langOptions[0].value)
   } catch {
-    return 'en'
+    return langOptions[0].value
   }
 }
 

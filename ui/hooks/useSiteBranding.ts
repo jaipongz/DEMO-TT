@@ -3,7 +3,7 @@ import type { SiteSettings } from '../types/siteSettings'
 import { DEFAULT_BRANDING, normalizeSiteBranding, normalizeSiteSettings } from '../utils/siteSettings'
 
 export function useSiteBranding() {
-  const [branding, setBranding] = useState(DEFAULT_BRANDING)
+  const [branding, setBranding] = useState<Pick<SiteSettings, 'siteName' | 'faviconUrl'>>(DEFAULT_BRANDING)
 
   useEffect(() => {
     if (typeof window === 'undefined') return

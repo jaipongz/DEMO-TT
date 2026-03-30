@@ -1,4 +1,5 @@
 import type { SiteSettings } from '../types/siteSettings'
+import { displayLocaleOptions } from '../config/core'
 
 type SiteSettingsLike = Partial<SiteSettings> & {
   site_name?: string
@@ -55,7 +56,7 @@ export function normalizeSiteSettings(input: unknown): Partial<SiteSettings> {
     maxLoginAttempts: toNumberValue(data.maxLoginAttempts ?? data.max_login_attempts, 5),
     maxRevision: toNumberValue(data.maxRevision ?? data.max_revision, 5),
     actionLogsRetention: toStringValue(data.actionLogsRetention ?? data.action_logs_retention, '6_month') as SiteSettings['actionLogsRetention'],
-    locale: toStringValue(data.locale, 'en'),
+    locale: toStringValue(data.locale, displayLocaleOptions[0].value),
     timezone: toStringValue(data.timezone, 'Asia/Bangkok'),
     maintenanceMode: toStringValue(data.maintenanceMode ?? data.maintenance_mode, 'off') as SiteSettings['maintenanceMode'],
     dynamicConfigs: normalizeDynamicConfigs(data.dynamicConfigs ?? data.dynamic_configs),

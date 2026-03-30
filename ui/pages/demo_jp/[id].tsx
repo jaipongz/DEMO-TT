@@ -39,7 +39,6 @@ export default function DemoJpDetailPage() {
         thumbnail: '',
         intro_video: '',
         attachment: '',
-        obj_lang: 'en',
         obj_state: 'draft',
       }}
       title={isNew ? 'Create Demo JP' : readOnly ? 'View Demo JP' : 'Edit Demo JP'}

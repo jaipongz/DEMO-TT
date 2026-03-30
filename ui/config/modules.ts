@@ -11,10 +11,16 @@ export const modules: ModuleConfig[] = [
     //     label: 'Articles', // Display name for the module
     //     href: '/articles', // URL path to navigate to when the module is clicked
     // },
+    {id:'article', label:'Article', href:'/article'},
     {
         id: 'demo_jp',
         label: 'Demo JP',
         href: '/demo_jp',
+    },
+    {
+        id: 'demo_jp_test',
+        label: 'Demo JP Test',
+        href: '/demo_jp_test',
     },
     {
         id: 'admin',
